@@ -1,6 +1,6 @@
 name = "Kdautoml"
 uuid = "fc32655e-c63e-4c7e-8b56-0cfc28f9e13a"
-authors = ["Corneliu Cofaru <cornel@oxoaresearch.com>"]
+authors = ["Corneliu Cofaru <corneliu.cofaru@vub.be>"]
 version = "0.1.0"
 
 [deps]
