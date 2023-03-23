@@ -54,7 +54,7 @@ Builds kb queries from input data structures, sends them to the kb and
 fetches the results and processes them into response data structures
 with which an constraint problem is built.
 """
-function kb_query(kb, ps_state::T) where {T<:Tuple{AbstractComponent, Vector, Dict}}
+function kb_query(kb, ps_state::T; connection=nothing) where {T<:Tuple{AbstractComponent, Vector, Dict}}
 
     # Read state into variables
     component, pipeline, piperesults = ps_state
@@ -107,9 +107,11 @@ function kb_query(kb, ps_state::T) where {T<:Tuple{AbstractComponent, Vector, Di
 
     # Read and parse components (including preconditions)
     component_name = namify(component)
-    _r = cypher_shell(get_container(PIPESYNTHESIS_CONTAINER_NAME),
-                      get_neo4j_user(),
-                      get_neo4j_pass(),
+    connection == nothing && (connection = (get_container(PIPESYNTHESIS_CONTAINER_NAME),
+                                            get_neo4j_user(),
+                                            get_neo4j_pass())
+                             )
+    _r = cypher_shell(connection...,
                       f_query_components(component_name; precondition_symbols);
                       output=true)
     components = make_dict(parse_neo4j_result(_r))
@@ -171,7 +173,7 @@ fs_state = (read_table = :Subscriptions,
 
 ```
 """
-function kb_query(kb, fs_state::NamedTuple)
+function kb_query(kb, fs_state::NamedTuple; connection=nothing)
     f_query_components(feature_type) = """
         MATCH (n:$feature_type)-[:HASA]->(ac)<-[:ISA*]-(c)-[:PRECONDITIONED_BY]->(p)
         UNWIND labels(ac) as acl UNWIND labels(c) as cl UNWIND labels(p) as pl
@@ -183,10 +185,13 @@ function kb_query(kb, fs_state::NamedTuple)
         """
 
     _to_string = ft -> last(split(string(ft), "."))
-    _r = cypher_shell(get_container(FEATURESYNTHESIS_CONTAINER_NAME),
-                      get_neo4j_user(),
-                      get_neo4j_pass(),
-                      f_query_components(_to_string(fs_state.feature_type)); output=true)
+    connection == nothing && (connection = (get_container(FEATURESYNTHESIS_CONTAINER_NAME),
+                                            get_neo4j_user(),
+                                            get_neo4j_pass())
+                             )
+    _r = cypher_shell(connection...,
+                      f_query_components(_to_string(fs_state.feature_type));
+                      output=true)
     _r = parse_neo4j_result(_r)
 
     component_data = MultiDict()

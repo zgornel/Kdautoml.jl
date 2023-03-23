@@ -10,32 +10,32 @@ The input parameters are
     • visited - a list of visited nodes
     • features - back, direct and entity ffeatures; a Dict with :rfeatures, :dfeatures and :efeatures as keys, AST vectors as values
 """
-function deep_feature_synthesis!(features, current, entities, visited, max_depth=1; kb=nothing, calculate=false)
+function deep_feature_synthesis!(features, current, entities, visited, max_depth=1; kb=nothing, calculate=false, connection=nothing)
     max_depth < 0 && return
     visited = union(visited, current)
     bl = backward_links(entities, current)
     fl = direct_links(entities, current)
     @info "Node $current: visited=$visited, $bl, $fl, $(length(bl)) backward links, $(length(fl)) forward links"
-    build_identity_features!(features, entities, current, current, max_depth; kb, calculate)
+    build_identity_features!(features, entities, current, current, max_depth; kb, calculate, connection)
     for e in bl
-        deep_feature_synthesis!(features, e, entities, visited, max_depth-1; kb, calculate)
-        build_backward_features!(features, entities, current, e, max_depth; kb, calculate)
+        deep_feature_synthesis!(features, e, entities, visited, max_depth-1; kb, calculate, connection)
+        build_backward_features!(features, entities, current, e, max_depth; kb, calculate, connection)
     end
     for e in fl
         if e ∈ visited
             println("$e already visited, skipping...")
             continue
         end
-        deep_feature_synthesis!(features, e, entities, visited, max_depth-1; kb, calculate)
-        build_direct_features!(features, entities, current, e, max_depth; kb, calculate)
+        deep_feature_synthesis!(features, e, entities, visited, max_depth-1; kb, calculate, connection)
+        build_direct_features!(features, entities, current, e, max_depth; kb, calculate, connection)
     end
-    build_entity_features!(features, entities, current, current, max_depth; kb, calculate)
+    build_entity_features!(features, entities, current, current, max_depth; kb, calculate, connection)
 end
 
 
-function deep_feature_synthesis(current, entities, visited, max_depth=1; kb=nothing, calculate=false)
+function deep_feature_synthesis(current, entities, visited, max_depth=1; kb=nothing, calculate=false, connection=nothing)
     features = Dict{Symbol, AbstractFeature}()
-    deep_feature_synthesis!(features, current, entities, visited, max_depth; kb, calculate)
+    deep_feature_synthesis!(features, current, entities, visited, max_depth; kb, calculate, connection)
     return features
 end
 
@@ -43,11 +43,15 @@ end
 """
 Deep feature synthesis function for a single table (DataFrame) input.
 """
-function deep_feature_synthesis(df::DataFrame, max_depth=1; df_name=Symbol(:df_, gensym()), kb=nothing, calculate=false)
+function deep_feature_synthesis(df::DataFrame,
+                                max_depth=1;
+                                df_name=Symbol(:df_, gensym()),
+                                kb=nothing, calculate=false,
+                                connection=nothing)
     mg = MetaDiGraph()
     add_vertices!(mg, 1)
     set_props!(mg, 1, Dict(:df_name=>df_name, :df=>df))
-    return deep_feature_synthesis(1, mg, [], max_depth; kb, calculate)
+    return deep_feature_synthesis(1, mg, [], max_depth; kb, calculate, connection)
 end
 
 
@@ -125,14 +129,14 @@ _get_df_name(g, ::Nothing) = nothing
 ###fetch_df_and_name(g, ::Nothing) = (nothing, nothing)
 
 
-function build_features!(feature_type, features, g, current_table, link_table, depth; kb=nothing, calculate=false, use_vectors=true)
+function build_features!(feature_type, features, g, current_table, link_table, depth; kb=nothing, calculate=false, use_vectors=true, connection=nothing)
     link= _get_link(feature_type, g, current_table, link_table)
     print_info(feature_type, depth, _get_df_name(g, current_table), link)
     data = (features=features,
             graph=g,
             current_table=_get_df_name(g, current_table),  # always the write table as well
             link=link)
-    _build_features!(feature_type, data, kb; use_vectors, calculate, depth)
+    _build_features!(feature_type, data, kb; use_vectors, calculate, depth, connection)
     nothing
 end
 
@@ -226,7 +230,7 @@ end
 
 
 # features is a Dict{Symbol, AbstractFeature}
-function _build_features!(feature_type, data, kb; use_vectors=true, calculate=false, depth=0)
+function _build_features!(feature_type, data, kb; use_vectors=true, calculate=false, depth=0, connection=nothing)
     n_input_features = 0
     n_max_features = 0
     n_calculated_features = 0
@@ -234,7 +238,7 @@ function _build_features!(feature_type, data, kb; use_vectors=true, calculate=fa
 
     for (fname, feltype) in name_eltype_iterator(get_read_data(feature_type, data))
         fs_state = get_fs_state_data(feature_type, data, fname, feltype, use_vectors)
-        kb_result = Kdautoml.kb_query(kb, fs_state)
+        kb_result = Kdautoml.kb_query(kb, fs_state; connection)
         comps = [FeatureComponents(;r...) for r in kb_result]
         base_ast = build_generic_feature_ast(fs_state.feature_type; use_vectors=fs_state.use_vectors)
 

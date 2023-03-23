@@ -4,7 +4,8 @@ function transition(state::AbstractState,
                     component::AbstractComponent;
                     kb=nothing,
                     pipelines=nothing,
-                    printbuffer="__tree__")
+                    printbuffer="__tree__",
+                    connection=nothing)
     if kb == nothing || pipelines == nothing
         @error "`kb` and `pipelines` need to be provided"
     end
@@ -21,7 +22,7 @@ function transition(state::AbstractState,
 
         # create query - sends name of pipe leaf (last component) to query creation
         ps_state = (component, treepath, pipelines.artifacts)
-        kb_result = kb_query(kb, ps_state)
+        kb_result = kb_query(kb, ps_state; connection)
 
         # Update pipelines
         updatenodes = get_update_nodes(kb_result, ps_state)
