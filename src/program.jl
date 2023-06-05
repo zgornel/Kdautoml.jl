@@ -1,3 +1,8 @@
+# TODO: Look over this interesting links
+# • https://github.com/SciML/RuntimeGeneratedFunctions.jl (https://github.com/SciML/RuntimeGeneratedFunctions.jl)
+# • https://domluna.github.io/JuliaFormatter.jl/stable/ (julia formatter)
+# • https://github.com/jkrumbiegel/HotTest.jl/blob/main/src/HotTest.jl (useful stuff for wrapping code into modules)
+#
 # CodeNode - basic structure representing the node of the tree
 @auto_hash_equals mutable struct CodeNode
     id::String
