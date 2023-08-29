@@ -1,3 +1,11 @@
+@reexport module ProgramExecution
+
+using ..AutoHashEquals
+using ..AbstractTrees
+
+import ..ControlFlow
+
+export AbstractPipelines, Pipelines, AbstractProgram, DaggerProgram, CodeNode, print_tree_debug
 # TODO: Look over this interesting links
 # • https://github.com/SciML/RuntimeGeneratedFunctions.jl (https://github.com/SciML/RuntimeGeneratedFunctions.jl)
 # • https://domluna.github.io/JuliaFormatter.jl/stable/ (julia formatter)
@@ -44,7 +52,7 @@ Base.show(io::IO, n::CodeNode) = begin
 end
 
 
-function paths(startnode, endnodeids)
+function ControlFlow.paths(startnode, endnodeids)
     # Function that shrinks a Vector{CodeNode} to the first occurence
     # of a CodeNode that has `node` in its children (used to go back
     # in the tree if the vector is obtained through a pre-order traversal
@@ -73,9 +81,9 @@ function paths(startnode, endnodeids)
 end
 
 
-function prune!(root, leaf)
+function ControlFlow.prune!(root, leaf)
     @assert length(children(leaf)) == 0 "Deletion start node has to be a leaf"
-    _, treepath = first(paths(root, [leaf.id]))
+    _, treepath = first(ControlFlow.paths(root, [leaf.id]))
     pos = -1
     for (i, node) in Iterators.reverse(enumerate(treepath))
         if length(children(node)) <= 1
@@ -156,7 +164,7 @@ form_footer(program::DaggerProgram) = begin
 end
 
 
-function execute(program::DaggerProgram)
+function ControlFlow.execute(program::DaggerProgram)
     try
         @debug "PROGRAM_EXEC: Assembling program..."
         prg = map([program.header, program.segments..., form_footer(program)]) do line
@@ -253,7 +261,7 @@ Base.show(io::IO, pipelines::Pipelines{P}) where {P<:AbstractProgram} = begin
     print("Pipelines{$P} with $nl pipelines and $(length(pipelines.artifacts)) artifacts.")
 end
 
-function build(nodes::Vector{CodeNode}, ::Pipelines{P}) where {P<:AbstractProgram}
+function ControlFlow.build(nodes::Vector{CodeNode}, ::Pipelines{P}) where {P<:AbstractProgram}
     program = P(;header=true)
     for node in nodes
         node.name == "root" && continue
@@ -268,11 +276,13 @@ id2node(id, tree) = begin
     end
 end
 
-function build(nodeid::String, pipelines)
+function ControlFlow.build(nodeid::String, pipelines)
     node = id2node(nodeid, pipelines.tree)
-    for (leaf, path) in paths(pipelines.tree, [nodeid])
+    for (leaf, path) in ControlFlow.paths(pipelines.tree, [nodeid])
         if leaf.id == nodeid
-            return build(path, pipelines)
+            return ControlFlow.build(path, pipelines)
         end
     end
 end
+
+end # module

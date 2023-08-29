@@ -19,7 +19,7 @@ module DeepFeatureSynthesis
     using Graphs
     using MetaGraphs
     using MLJ
-    using ..Kdautoml
+    using ..KnowledgeBase
     export AbstractFeature, deep_feature_synthesis
 
     include("features.jl")

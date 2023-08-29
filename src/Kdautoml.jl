@@ -5,6 +5,7 @@ module Kdautoml
     using TOML
     using DelimitedFiles
     using LinearAlgebra
+    using Reexport
     using MacroTools
     using DataStructures
     using Combinatorics
@@ -37,12 +38,9 @@ module Kdautoml
         # Declare container stuff
     end
 
-    include("utils.jl")
-    include("automaton.jl")
-    include("kb.jl")
-    include("sat.jl")
-    include("program.jl")
-    include("transition.jl")
-    include("dfs/DeepFeatureSynthesis.jl")
+    include("transition.jl")  # CF - highest level, most abstract, has all top-level definitions
+    include("program.jl")     # PE - second level, needs stuff defined previously
+    include("kb.jl")          # KB - third level, needs methods defined in the previous two
+    include("dfs/DeepFeatureSynthesis.jl") # second level also, defines KB query interface for features
 
 end # module
