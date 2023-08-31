@@ -2,13 +2,16 @@
 
 using ..TOML
 using ..DelimitedFiles
+using ..LinearAlgebra  # for `norm` in `rbf_kernel` (utils.jl)
 using ..DataStructures
 using ..MLJ
 using ..DataFrames
-using ..MLJModelInterface
 using ..Symbolics
 using ..SatisfiabilityInterface
 using ..MacroTools
+using ..Kdautoml  # needed for KB-defined precondition code in feature synthesis
+                  # that when executed, references `Kdautoml`
+import ..MLJModelInterface
 import ..ControlFlow
 import ..ProgramExecution
 

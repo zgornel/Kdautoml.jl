@@ -238,7 +238,7 @@ function _build_features!(feature_type, data, kb; use_vectors=true, calculate=fa
 
     for (fname, feltype) in name_eltype_iterator(get_read_data(feature_type, data))
         fs_state = get_fs_state_data(feature_type, data, fname, feltype, use_vectors)
-        kb_result = KnowledgeBase.kb_query(kb, fs_state; connection)
+        kb_result = ControlFlow.kb_query(kb, fs_state; connection)
         comps = [FeatureComponents(;r...) for r in kb_result]
         base_ast = build_generic_feature_ast(fs_state.feature_type; use_vectors=fs_state.use_vectors)
 

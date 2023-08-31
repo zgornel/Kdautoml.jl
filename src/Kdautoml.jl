@@ -1,5 +1,4 @@
 module Kdautoml
-
     using Random
     using Statistics
     using TOML
@@ -23,15 +22,16 @@ module Kdautoml
     using MLJModelInterface
     import AbstractTrees: children, printnode
     import Base: push!, pop!
-    
-    export CodeNode,
+
+    export DeepFeatureSynthesis,
+           AbstractComponent,
+           AbstractState,
+           CodeNode,
            build,
            build_and_run_ml_pipeline,
            execute,
            paths,
-           push!,
-           AbstractComponent,
-           AbstractState
+           push!
 
     function __init__()
         # This bit is executed after module load

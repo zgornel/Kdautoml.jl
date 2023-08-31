@@ -18,28 +18,29 @@ module DeepFeatureSynthesis
     using MacroTools
     using Graphs
     using MetaGraphs
-    using MLJ
-    using ..KnowledgeBase
+    import ..MLJ
+    using ..ControlFlow  # `kb_query` is defined in `ControlFlow`
+
     export AbstractFeature, deep_feature_synthesis
 
     include("features.jl")
     include("traversal.jl")
 
-# MLJ Interface
-mutable struct DeepFeatureSynthesisTransformer <: MLJ.Static
-    path::AbstractString
-    max_depth::Int
-    calculate::Bool
-end
-
-function MLJ.transform(dfs::DeepFeatureSynthesisTransformer, _, data)
-    kb = open(dfs.path) do io
-        TOML.parse(io)
+    # MLJ Interface
+    mutable struct DeepFeatureSynthesisTransformer <: MLJ.Static
+        path::AbstractString
+        max_depth::Int
+        calculate::Bool
     end
-    #kb = TOML.parse(open(dfs.path))
-    features = deep_feature_synthesis(data, dfs.max_depth; kb=kb, calculate=dfs.calculate)
-    df_features, _ = to_df(features)
-    return df_features
-end
+
+    function MLJ.transform(dfs::DeepFeatureSynthesisTransformer, _, data)
+        kb = open(dfs.path) do io
+            TOML.parse(io)
+        end
+        #kb = TOML.parse(open(dfs.path))
+        features = deep_feature_synthesis(data, dfs.max_depth; kb=kb, calculate=dfs.calculate)
+        df_features, _ = to_df(features)
+        return df_features
+    end
 
 end
