@@ -16,6 +16,9 @@ import ..ControlFlow
 import ..ProgramExecution
 
 export kb_load,
+       get_container, get_neo4j_user, get_neo4j_pass,
+       kb_to_neo4j_statements, cypher_shell,
+       PIPESYNTHESIS_CONTAINER_NAME, FEATURESYNTHESIS_CONTAINER_NAME,
        build_and_run_ml_pipeline,
        df2vec, xor_linear_separability,
        FeatureProduct, Kernelizer, rbf_kernel,
