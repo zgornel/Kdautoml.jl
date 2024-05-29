@@ -1,0 +1,49 @@
+{
+  "Rules": [
+    { "from": "KNOWLEDGE_BASE", "to": "CONTROL_FLOW"},
+    { "from": "KNOWLEDGE_BASE", "to": "COMPONENT_KB"},
+    { "from": "PROGRAM_EXECUTION", "to": "CONTROL_FLOW"},
+    { "from": "PROGRAM_EXECUTION", "to": "COMPONENT_PE"},
+    { "from": "UTILS", "to": "COMPONENT_UTILS"},
+    { "from": "CONTROL_FLOW", "to": "COMPONENT_CF"},
+    { "from": "KNOWLEDGE_BASE", "to": "UTILS"}
+  ],
+  "Components": [
+    {
+      "name": "PROGRAM_EXECUTION",
+      "sources": [
+        {
+          "type": "File",
+          "value": "program.jl"
+        }
+      ]
+    },
+    {
+      "name": "CONTROL_FLOW",
+      "sources": [
+        {
+          "type": "FileList",
+          "value": ["automaton.jl", "transition.jl"]
+        }
+      ]
+    },
+    {
+      "name": "KNOWLEDGE_BASE",
+      "sources": [
+        {
+          "type": "FileList",
+          "value": ["kb.jl", "sat.jl"]
+        }
+      ]
+    },
+    {
+      "name": "UTILS",
+      "sources": [
+        {
+          "type": "File",
+          "value": "utils.jl"
+        }
+      ]
+    }
+  ]
+}
