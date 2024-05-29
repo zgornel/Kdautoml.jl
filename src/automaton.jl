@@ -103,26 +103,26 @@ end
 ### State transitions
 _transition(::AbstractState, ::AbstractComponent; init=nothing) = throw(FSMTransitionError)
 
-_transition(state::NoData, component::LoadData; init=nothing) = Data(init)
+_transition(state::NoData, component::LoadData; init=nothing) = ControlFlow.Data(init)
 
-_transition(state::Data, component::PreprocessData; init=nothing) = Data(init)
+_transition(state::ControlFlow.Data, component::PreprocessData; init=nothing) = ControlFlow.Data(init)
 
-_transition(state::Data, component::SelectModel; init=nothing) = ModelableData(init)
+_transition(state::ControlFlow.Data, component::SelectModel; init=nothing) = ModelableData(init)
 
-_transition(state::Data, component::SplitData; init=nothing) = Data(init)
-_transition(state::Data, component::SplitHoldout; init=nothing) = Data(init)
-_transition(state::Data, component::SplitCV; init=nothing) = Data(init)
-_transition(state::Data, component::SplitStratifiedCV; init=nothing) = Data(init)
+_transition(state::ControlFlow.Data, component::SplitData; init=nothing) = ControlFlow.Data(init)
+_transition(state::ControlFlow.Data, component::SplitHoldout; init=nothing) = ControlFlow.Data(init)
+_transition(state::ControlFlow.Data, component::SplitCV; init=nothing) = ControlFlow.Data(init)
+_transition(state::ControlFlow.Data, component::SplitStratifiedCV; init=nothing) = ControlFlow.Data(init)
 
-_transition(state::Data, component::FeatureSelection; init=nothing) = Data(init)
-_transition(state::Data, component::RandomFeatureSelection; init=nothing) = Data(init)
-_transition(state::Data, component::DirectFeatureSelection; init=nothing) = Data(init)
+_transition(state::ControlFlow.Data, component::FeatureSelection; init=nothing) = ControlFlow.Data(init)
+_transition(state::ControlFlow.Data, component::RandomFeatureSelection; init=nothing) = ControlFlow.Data(init)
+_transition(state::ControlFlow.Data, component::DirectFeatureSelection; init=nothing) = ControlFlow.Data(init)
 
-_transition(state::Data, component::FeatureOperation; init=nothing) = Data(init)
-_transition(state::Data, component::FeatureGeneration; init=nothing) = Data(init)
-_transition(state::Data, component::DimensionalityReduction; init=nothing) = Data(init)
-_transition(state::Data, component::ProductFeatures; init=nothing) = Data(init)
-_transition(state::Data, component::DFS; init=nothing) = Data(init)
+_transition(state::ControlFlow.Data, component::FeatureOperation; init=nothing) = ControlFlow.Data(init)
+_transition(state::ControlFlow.Data, component::FeatureGeneration; init=nothing) = ControlFlow.Data(init)
+_transition(state::ControlFlow.Data, component::DimensionalityReduction; init=nothing) = ControlFlow.Data(init)
+_transition(state::ControlFlow.Data, component::ProductFeatures; init=nothing) = ControlFlow.Data(init)
+_transition(state::ControlFlow.Data, component::DFS; init=nothing) = ControlFlow.Data(init)
 
 _transition(state::ModelableData, component::FeatureSelection; init=nothing) = ModelableData(init)
 _transition(state::ModelableData, component::RandomFeatureSelection; init=nothing) = ModelableData(init)

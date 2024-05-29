@@ -1,10 +1,10 @@
 module Kdautoml
-
     using Random
     using Statistics
     using TOML
     using DelimitedFiles
     using LinearAlgebra
+    using Reexport
     using MacroTools
     using DataStructures
     using Combinatorics
@@ -22,27 +22,25 @@ module Kdautoml
     using MLJModelInterface
     import AbstractTrees: children, printnode
     import Base: push!, pop!
-    
-    export CodeNode,
+
+    export DeepFeatureSynthesis,
+           AbstractComponent,
+           AbstractState,
+           CodeNode,
            build,
            build_and_run_ml_pipeline,
            execute,
            paths,
-           push!,
-           AbstractComponent,
-           AbstractState
+           push!
 
     function __init__()
         # This bit is executed after module load
         # Declare container stuff
     end
 
-    include("utils.jl")
-    include("automaton.jl")
-    include("kb.jl")
-    include("sat.jl")
-    include("program.jl")
-    include("transition.jl")
-    include("dfs/DeepFeatureSynthesis.jl")
+    include("transition.jl")  # CF - highest level, most abstract, has all top-level definitions
+    include("program.jl")     # PE - second level, needs stuff defined previously
+    include("kb.jl")          # KB - third level, needs methods defined in the previous two
+    include("dfs/DeepFeatureSynthesis.jl") # second level also, defines KB query interface for features
 
 end # module

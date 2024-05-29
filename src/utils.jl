@@ -7,10 +7,6 @@ get_neo4j_pass() = get(ENV, "NEO4J_PASS", "test")
 get_container(container_name) = chop(read(pipeline(`docker ps `,`grep "$container_name"`, `awk '{print $1}'`), String))
 
 # Utility functions
-function namify(type)
-    String(typeof(type).name.name)
-end
-
 function get_recursively(d, ks; splitter='/', default=nothing)
     keys = split(strip(isequal(splitter), ks), string(splitter))
     reduce((d, k)->get(d, k, default), keys, init=d)
@@ -63,7 +59,7 @@ function build_and_run_ml_pipeline(memory; measures=Accuracy(), tuning=Grid(reso
         # build tunable model (if the case)
         tuned_pipe = if (typeof(pipe) <: Probabilistic || typeof(pipe) <: Deterministic) && !isempty(memory.hyperparameters)
                 TunedModel(pipe,
-                           ranges=Kdautoml.build_ranges(pipe, memory.pipeline, memory.hyperparameters),
+                           ranges=build_ranges(pipe, memory.pipeline, memory.hyperparameters),
                            resampling=memory.split,
                            measures=measures,
                            tuning=tuning)

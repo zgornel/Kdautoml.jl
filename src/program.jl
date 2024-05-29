@@ -1,3 +1,15 @@
+@reexport module ProgramExecution
+
+using ..AutoHashEquals
+import ..AbstractTrees
+import ..ControlFlow
+
+export AbstractPipelines, Pipelines, AbstractProgram, DaggerProgram, CodeNode, print_tree_debug
+# TODO: Look over this interesting links
+# • https://github.com/SciML/RuntimeGeneratedFunctions.jl (https://github.com/SciML/RuntimeGeneratedFunctions.jl)
+# • https://domluna.github.io/JuliaFormatter.jl/stable/ (julia formatter)
+# • https://github.com/jkrumbiegel/HotTest.jl/blob/main/src/HotTest.jl (useful stuff for wrapping code into modules)
+#
 # CodeNode - basic structure representing the node of the tree
 @auto_hash_equals mutable struct CodeNode
     id::String
@@ -15,36 +27,36 @@ CodeNode(name::String, code) = CodeNode(string(hash(rand())), name, code, CodeNo
 CodeNode(name::Symbol, args...) = CodeNode(string(name), args...)  # handle Symbol names
 
 
-function children(n::CodeNode)
+function AbstractTrees.children(n::CodeNode)
     isempty(n.children) && return ()
     return n.children
 end
 
-printnode(io::IO, n::CodeNode) = print(io, "•-[$(n.name)]")
+AbstractTrees.printnode(io::IO, n::CodeNode) = print(io, "•-[$(n.name)]")
 
 printnode_debug(io::IO, n::CodeNode) = print(io, "•-[$(n.name); \"$(n.id)\"]")
 
-print_tree_debug(io::IO, n::CodeNode; kwargs...) = print_tree(printnode_debug, io, n; kwargs...)
+print_tree_debug(io::IO, n::CodeNode; kwargs...) = AbstractTrees.print_tree(printnode_debug, io, n; kwargs...)
 print_tree_debug(n::CodeNode; kwargs...) = print_tree_debug(stdout, n; kwargs...)
 
 Base.show(io::IO, n::CodeNode) = begin
-    nc = length(children(n))
+    nc = length(AbstractTrees.children(n))
     chname = nc <= 1 ? "child" : "children"
     if nc == 0
         print(io, "Leaf node \"$(n.name)\"")
     else
-        nodenames = map(x->"\"$(x.name)\"", children(n))
+        nodenames = map(x->"\"$(x.name)\"", AbstractTrees.children(n))
         print(io, "CodeNode with $nc $chname [\"$(n.name)\"]•-[$(join(nodenames, ","))]")
     end
 end
 
 
-function paths(startnode, endnodeids)
+function ControlFlow.paths(startnode, endnodeids)
     # Function that shrinks a Vector{CodeNode} to the first occurence
     # of a CodeNode that has `node` in its children (used to go back
     # in the tree if the vector is obtained through a pre-order traversal
     shrinkto = (stack, node)->begin
-        cutidx = findfirst(n->in(node, children(n)), stack)
+        cutidx = findfirst(n->in(node, AbstractTrees.children(n)), stack)
         !isnothing(cutidx) && (stack = stack[1:cutidx])
         return stack
     end
@@ -56,7 +68,7 @@ function paths(startnode, endnodeids)
     !AbstractTrees.has_children(startnode) && return Dict(startnode=>[startnode])
     for node in ordering[begin+1:end]
         #println("CodeNode=$(node.name), tmp=$(map(n->n.name, tmp)))")
-        !in(node, children(last(tmp))) && (tmp = shrinkto(tmp, node))
+        !in(node, AbstractTrees.children(last(tmp))) && (tmp = shrinkto(tmp, node))
         if node.id in endnodeids  # sought node
             #println("Returning paths for $(node.name)!")
             push!(PATHS, node=>vcat(tmp, node))
@@ -68,12 +80,12 @@ function paths(startnode, endnodeids)
 end
 
 
-function prune!(root, leaf)
-    @assert length(children(leaf)) == 0 "Deletion start node has to be a leaf"
-    _, treepath = first(paths(root, [leaf.id]))
+function ControlFlow.prune!(root, leaf)
+    @assert length(AbstractTrees.children(leaf)) == 0 "Deletion start node has to be a leaf"
+    _, treepath = first(ControlFlow.paths(root, [leaf.id]))
     pos = -1
     for (i, node) in Iterators.reverse(enumerate(treepath))
-        if length(children(node)) <= 1
+        if length(AbstractTrees.children(node)) <= 1
             pos = i  # pos is the index of the last node that has 0 or 1 children
         else         # in a continous sequence
             break
@@ -151,14 +163,15 @@ form_footer(program::DaggerProgram) = begin
 end
 
 
-function execute(program::DaggerProgram)
+function ControlFlow.execute(program::DaggerProgram)
     try
         @debug "PROGRAM_EXEC: Assembling program..."
-        prg = map([program.header, program.segments..., form_footer(program)]) do line
+        _prg = map([program.header, program.segments..., form_footer(program)]) do line
                 replace(line, "\n"=>" ")
               end
-        eval(Meta.parse(strip(join(prg, "\n"))))
-        _mod = eval(Meta.parse("$(@__MODULE__).Module_"*program.name))
+        prg = strip(join(_prg, "\n"))
+        eval(Meta.parse(prg))
+        _mod = getproperty(@__MODULE__, Symbol("Module_", program.name))
         @info "PROGRAM_EXEC: Executed program (in $_mod)..."
         output_symbol = Symbol("v_$(program.name)")
         result = getproperty(_mod, output_symbol)
@@ -242,13 +255,13 @@ end
 
 Base.show(io::IO, pipelines::Pipelines{P}) where {P<:AbstractProgram} = begin
     nl = 0
-    for _ in Leaves(pipelines.tree)
+    for _ in AbstractTrees.Leaves(pipelines.tree)
         nl+= 1
     end
     print("Pipelines{$P} with $nl pipelines and $(length(pipelines.artifacts)) artifacts.")
 end
 
-function build(nodes::Vector{CodeNode}, ::Pipelines{P}) where {P<:AbstractProgram}
+function ControlFlow.build(nodes::Vector{CodeNode}, ::Pipelines{P}) where {P<:AbstractProgram}
     program = P(;header=true)
     for node in nodes
         node.name == "root" && continue
@@ -263,11 +276,13 @@ id2node(id, tree) = begin
     end
 end
 
-function build(nodeid::String, pipelines)
+function ControlFlow.build(nodeid::String, pipelines)
     node = id2node(nodeid, pipelines.tree)
-    for (leaf, path) in paths(pipelines.tree, [nodeid])
+    for (leaf, path) in ControlFlow.paths(pipelines.tree, [nodeid])
         if leaf.id == nodeid
-            return build(path, pipelines)
+            return ControlFlow.build(path, pipelines)
         end
     end
 end
+
+end # module
