@@ -28,16 +28,18 @@ push_job:
 
 merge_request_job:
   stage: run_kheops_mr
+  artifacts:
+    paths:
+      - kheops_output.txt
+      - kheops_output.mermaid
   script:
-    - docker run --volume=./:/tmp ghcr.io/oxoaresearch/kheops-compiled:latest /kheopscli/bin/kheopscli --project-dir /tmp/src --config-path /tmp/.kheops/input-configuration.json --input-parser Julia --output-type text --log-level debug > ./_output.txt
-    - docker run --volume=./:/tmp ghcr.io/oxoaresearch/kheops-compiled:latest /kheopscli/bin/kheopscli --project-dir /tmp/src --config-path /tmp/.kheops/input-configuration.json --input-parser Julia --output-type diagram --diagram-backend mermaid --log-level debug > ./_output.mermaid
+    - docker run --volume=./:/tmp ghcr.io/oxoaresearch/kheops-compiled:latest /kheopscli/bin/kheopscli --project-dir /tmp/src --config-path /tmp/.kheops/input-configuration.json --input-parser Julia --output-type text --log-level debug > ./kheops_output.txt
+    - docker run --volume=./:/tmp ghcr.io/oxoaresearch/kheops-compiled:latest /kheopscli/bin/kheopscli --project-dir /tmp/src --config-path /tmp/.kheops/input-configuration.json --input-parser Julia --output-type diagram --diagram-backend mermaid --log-level debug > ./kheops_output.mermaid
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
 post_message_to_merge_request:
   stage: post_output_mr
-  dependencies:
-    - merge_request_job
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: never
@@ -46,4 +48,5 @@ post_message_to_merge_request:
   script:
     - tree -L 1 ./
     - export GITLAB_TOKEN=glpat-3YKjQp-kcHsHxJW4t_SJ
-    - 'curl --location --request POST "https://gitlab.com/api/v4/projects/$CI_MERGE_REQUEST_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes" --header "PRIVATE-TOKEN: $GITLAB_TOKEN" --header "Content-Type: application/json" --data-raw "{ \"body\": \"Look at this awesome message $(cat ./_output.txt) \" }"'
+    #TODO: Fix link to work for gitlab.ai.vub.ac.be
+    - 'curl --location --request POST "https://gitlab.com/api/v4/projects/$CI_MERGE_REQUEST_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes" --header "PRIVATE-TOKEN: $GITLAB_TOKEN" --header "Content-Type: application/json" --data-raw "{ \"body\": \"Look at this awesome message $(cat kheops_output.txt) \" }"'
