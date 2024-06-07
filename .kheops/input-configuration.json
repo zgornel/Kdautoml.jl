@@ -1,12 +1,11 @@
 {
   "Rules": [
     { "from": "KNOWLEDGE_BASE", "to": "CONTROL_FLOW"},
-    { "from": "KNOWLEDGE_BASE", "to": "COMPONENT_KB"},
+    { "from": "KNOWLEDGE_BASE", "to": "KNOWLEDGE_BASE"},
+    { "from": "KNOWLEDGE_BASE", "to": "PROGRAM_EXECUTION"},
     { "from": "PROGRAM_EXECUTION", "to": "CONTROL_FLOW"},
-    { "from": "PROGRAM_EXECUTION", "to": "COMPONENT_PE"},
-    { "from": "UTILS", "to": "COMPONENT_UTILS"},
-    { "from": "CONTROL_FLOW", "to": "COMPONENT_CF"},
-    { "from": "KNOWLEDGE_BASE", "to": "UTILS"}
+    { "from": "PROGRAM_EXECUTION", "to": "PROGRAM_EXECUTION"},
+    { "from": "CONTROL_FLOW", "to": "CONTROL_FLOW"}
   ],
   "Components": [
     {
@@ -14,7 +13,7 @@
       "sources": [
         {
           "type": "File",
-          "value": "program.jl"
+          "value": "src/program.jl"
         }
       ]
     },
@@ -23,7 +22,7 @@
       "sources": [
         {
           "type": "FileList",
-          "value": ["automaton.jl", "transition.jl"]
+          "value": ["src/automaton.jl", "src/transition.jl"]
         }
       ]
     },
@@ -32,16 +31,7 @@
       "sources": [
         {
           "type": "FileList",
-          "value": ["kb.jl", "sat.jl"]
-        }
-      ]
-    },
-    {
-      "name": "UTILS",
-      "sources": [
-        {
-          "type": "File",
-          "value": "utils.jl"
+          "value": ["src/kb.jl", "src/sat.jl", "src/utils.jl"]
         }
       ]
     }
