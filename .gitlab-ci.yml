@@ -9,8 +9,6 @@ variables:
   WORKSPACE_DIR: "/tmp"                                 # inside Kheops-compiled container
   PROJECT_DIR: "/tmp/src"                               # inside Kheops-compiled container
   CONFIG_PATH: "/tmp/.kheops/input-configuration.json"  # inside Kheops-compiled container
-  EXTERNAL_PARSER_PATH: "/compodoc"                     # inside Kheops-compiled container
-  INPUT_PARSER: "angular"
   OUTPUT_TYPE: "text"
   LOG_LEVEL: "debug"
 
