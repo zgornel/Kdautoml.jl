@@ -1,0 +1,52 @@
+# For more documentation, on GitLab CI/CD YAML syntax check:
+#   https://docs.gitlab.com/ee/ci/yaml/
+#
+
+#image: ghcr.io/oxoaresearch/kheops-compiled:latest
+
+variables:
+  REPOSITORY_DIR: "./$CI_PROJECT_DIR"  					# inside runner
+  WORKSPACE_DIR: "/tmp"                                 # inside Kheops-compiled container
+  PROJECT_DIR: "/tmp/src"                               # inside Kheops-compiled container
+  CONFIG_PATH: "/tmp/.kheops/input-configuration.json"  # inside Kheops-compiled container
+  OUTPUT_TYPE: "text"
+  LOG_LEVEL: "debug"
+
+stages:
+  - run_kheops_push
+  - run_kheops_mr
+  - post_output_mr
+
+push_job:
+  stage: run_kheops_push
+  script:  # sample test run
+    - docker run --volume=./:/tmp ghcr.io/oxoaresearch/kheops-compiled:latest /kheopscli/bin/kheopscli --project-dir /tmp/src --config-path /tmp/.kheops/input-configuration.json --input-parser Julia --output-type text --log-level debug
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+
+merge_request_job:
+  stage: run_kheops_mr
+  artifacts:
+    paths:
+      - kheops_output.txt
+      - kheops_output.plantuml
+  script:
+    - docker run --volume=./:/tmp ghcr.io/oxoaresearch/kheops-compiled:latest /kheopscli/bin/kheopscli --project-dir /tmp/src --config-path /tmp/.kheops/input-configuration.json --input-parser Julia --output-type text --log-level error > ./kheops_output.txt
+    - docker run --volume=./:/tmp ghcr.io/oxoaresearch/kheops-compiled:latest /kheopscli/bin/kheopscli --project-dir /tmp/src --config-path /tmp/.kheops/input-configuration.json --input-parser Julia --output-type diagram --diagram-backend plantuml --log-level error > ./kheops_output.plantuml
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+post_message_to_merge_request:
+  stage: post_output_mr
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: on_success
+  dependencies:
+    - merge_request_job
+  script:
+    - tree -L 1 ./
+    - export GITLAB_TOKEN=glpat-3YKjQp-kcHsHxJW4t_SJ
+    #TODO: Fix to actually post the contents of kheops_output.txt and kheops_output.plantuml
+    - 'curl --request POST "https://gitlab.ai.vub.ac.be/api/v4/projects/$CI_MERGE_REQUEST_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes" --header "PRIVATE-TOKEN: $GITLAB_TOKEN" --header "Content-Type: application/json" --data-raw "{ \"body\": \"$(cat kheops_output.txt)\" }"'
