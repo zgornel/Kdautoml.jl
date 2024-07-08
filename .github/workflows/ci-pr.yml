@@ -1,0 +1,69 @@
+name: Kheops-compiled PULL REQUEST run
+env:
+  REPOSITORY_DIR: "./${{ github.event.repository.name }}"       # inside runner
+  WORKSPACE_DIR: "/workspace"                                   # inside Kheops-compiled container
+  PROJECT_DIR: "/workspace/src"                                 # inside Kheops-compiled container
+  CONFIG_PATH: "/workspace/.kheops/input-configuration.json"
+  INPUT_PARSER: julia
+  LOG_LEVEL: error
+on:
+  pull_request:
+    branches:
+      - main
+jobs:
+  build:
+    name: Kheops-compiled Docker ${{ github.event_name }}
+    #runs-on: [self-hosted]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+        arch:
+          - x64
+    steps:
+      - name: Checkout current project repository
+        uses: actions/checkout@v3
+        with:
+          path: ${{ env.REPOSITORY_DIR }}
+      - name: Comment PR
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: 'Testing architecture ...'
+          comment_tag: kheops_status_tag
+      - id: pull_docker_image
+        name: Pull Kheops-compiled container image
+        run: |
+          docker pull ghcr.io/oxoaresearch/kheops-compiled:latest
+      - id: run_docker_image
+        name: Run Kheops-compiled
+        run: |
+          echo 'DATA_DUMP<<EOF' >> $GITHUB_OUTPUT
+          echo '```' >> $GITHUB_OUTPUT
+          docker run --volume=${{ env.REPOSITORY_DIR }}:${{ env.WORKSPACE_DIR }} \
+                     ghcr.io/oxoaresearch/kheops-compiled:latest kheopscli/bin/kheopscli \
+                        --project-dir ${{ env.PROJECT_DIR }} \
+                        --config-path ${{ env.CONFIG_PATH }} \
+                        --input-parser ${{ env.INPUT_PARSER }} \
+                        --output-type text \
+                        --log-level ${{ env.LOG_LEVEL }}>> $GITHUB_OUTPUT
+          echo '```' >> $GITHUB_OUTPUT
+          
+          echo '```mermaid' >> $GITHUB_OUTPUT
+          docker run --volume=${{ env.REPOSITORY_DIR }}:${{ env.WORKSPACE_DIR }} \
+                     ghcr.io/oxoaresearch/kheops-compiled:latest kheopscli/bin/kheopscli \
+                        --project-dir ${{ env.PROJECT_DIR }} \
+                        --config-path ${{ env.CONFIG_PATH }} \
+                        --input-parser ${{ env.INPUT_PARSER }} \
+                        --output-type diagram \
+                        --diagram-type file \
+                        --diagram-backend mermaid \
+                        --log-level ${{ env.LOG_LEVEL }} >> $GITHUB_OUTPUT
+          echo '```' >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+      - name: Edit PR comment
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: ${{steps.run_docker_image.outputs.DATA_DUMP}}
+          comment_tag: kheops_status_tag
