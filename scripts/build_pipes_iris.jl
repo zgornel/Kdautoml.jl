@@ -4,7 +4,8 @@ using Pkg
 Pkg.activate(joinpath(dirname(@__FILE__), ".."))
 using Kdautoml
 
-kbpath = joinpath(dirname(@__FILE__), "../../../data/knowledge/pipe_synthesis.toml")
+BASE_PATH =joinpath(dirname(@__FILE__), "..") 
+kbpath = joinpath(BASE_PATH, "data/knowledge/pipe_synthesis.toml")
 @info "Loading KB at $kbpath"
 kb = Kdautoml.kb_load(kbpath)
 
@@ -15,8 +16,8 @@ pipes = Kdautoml.Pipelines(;backend=:Dagger)  # header is automaticall added
 primed_transition = (args...)->Kdautoml.transition(args...; kb=kb, pipelines=pipes)
 
 # Build pipelines
-csvpath = joinpath(dirname(@__FILE__), "../../..","data/datasets/iris.csv")
-dfs_args = ("\"$(joinpath(dirname(@__FILE__), "../../../data/knowledge/feature_synthesis.toml"))\"", 1, true)  # kb path, max_depth, calculate
+csvpath = joinpath(BASE_PATH,"data/datasets/iris.csv")
+dfs_args = ("\"$(joinpath(BASE_PATH, "data/knowledge/feature_synthesis.toml"))\"", 1, true)  # kb path, max_depth, calculate
 
 components= [Kdautoml.LoadData((arguments=(true, "\"$(csvpath)\"", "','"), execute=true)),
              Kdautoml.PreprocessData((arguments=([1,2,3,4],), execute=true,)),
@@ -31,7 +32,7 @@ components= [Kdautoml.LoadData((arguments=(true, "\"$(csvpath)\"", "','"), execu
       ]
 
 #Check first
-@assert reduce(Kdautoml._transition, components; init=Kdautoml.NoData(nothing)) isa Kdautoml.End{Nothing}
+@assert reduce(Kdautoml.ControlFlow._transition, components; init=Kdautoml.NoData(nothing)) isa Kdautoml.End{Nothing}
 
 endstate = reduce(primed_transition, components, init=Kdautoml.NoData(nothing))
 
