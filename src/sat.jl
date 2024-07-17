@@ -19,6 +19,27 @@
 #            # as long as z==false, qₛ does not matter; when z==true,
 const CS = ConstraintSolver
 
+function clean_variables!(model)
+    var_names = keys(CS.JuMP.object_dictionary(model))
+    var_refs = Iterators.flatten(values(CS.JuMP.object_dictionary(model)))
+    for vr in var_refs
+       CS.JuMP.delete(model, vr)
+    end
+    for vn in var_names
+       CS.JuMP.unregister(model, vn)
+    end
+end
+
+function clean_constraints!(model)
+    for ct in ConstraintSolver.JuMP.list_of_constraint_types(model)
+        for c in ConstraintSolver.JuMP.all_constraints(model, ct...)
+            cn = Symbol(ConstraintSolver.JuMP.name(c))
+            ConstraintSolver.JuMP.delete(model, c)
+            ConstraintSolver.JuMP.unregister(model, cn)
+        end
+    end
+end
+
 """
 Creates a CSP (constraint satisfaction problem) from the data returned from the kb (datakb, see format below) and solves it.
 
@@ -38,34 +59,37 @@ Creates a CSP (constraint satisfaction problem) from the data returned from the 
 """
 function solve_csp(datakb, state)
     namemapping = Dict{Symbol, Dict{String, CS.VariableRef}}()
-
-    # Initialize model
-    m = CS.Model(CS.optimizer_with_attributes(CS.Optimizer,
-                     "time_limit"=>1000,
-                     "all_solutions"=>true,
-                     "all_optimal_solutions"=>true))
+    # Clean model from previous variables and constraints
+    clean_constraints!(model)
+    clean_variables!(model)
 
     # Map datakb components to variables and retain mapping
-    local xvars
     for (comp, funcs) in get(datakb, :components, Dict())
+        k = randstring(5)
         n = length(funcs)
-        CS.@variable(m, xvars[1:n], Bin) # create variables f₁∈ 0:1, f₂∈ 0:1 ...
-        CS.@constraint(m, sum(xvars) == 1)
-        push!(namemapping, comp=>Dict(funcs[i].name=>xvars[i] for i in 1:n))
-        for (i, ((name, code, hyperparameters, package, preconditions), _)) in enumerate(zip(funcs, xvars))
+        # Note: the statements below are evaluated as there was no way to interpolate
+        #       dynamically new variable names into the macros @variable and @constraint
+        xvars = gensym()
+        model = Kdautoml.KnowledgeBase.model
+        @eval KnowledgeBase xxv=CS.@variable(model, $xvars[1:$n], Bin)  # create variables f₁∈ 0:1, f₂∈ 0:1 ...
+        @eval KnowledgeBase CS.@constraint(model, sum($xvars) == 1)
+        push!(namemapping, comp=>Dict(funcs[i].name=>xxv[i] for i in 1:n))
+        for (i, ((name, code, hyperparameters, package, preconditions), _)) in enumerate(zip(funcs, xxv))
             for ps in preconditions  # eval preconditions for each component and add constraints
                 _f = eval(Meta.parse(strip(ps.code)))
                 _fc = Base.invokelatest(_f, (ps.args...))
                 pv = Base.invokelatest(_fc, state)
                 @info "KB(SAT): Executed precondition $(ps.name) => $pv"
-                CS.@constraint(m, xvars[i] == xvars[i] * pv)
+                @eval KnowledgeBase CS.@constraint(model, $xvars[$i] == $xvars[$i] * $pv)
             end
         end
     end
 
     # Solve
-    CS.optimize!(m);
-    sol = [Dict(xvars[j]=>CS.JuMP.value(xvars[j]; result=i) for j in 1:CS.JuMP.num_variables(m)) for i in 1:CS.JuMP.result_count(m)];
+    CS.optimize!(model);
+    sol = [ Dict(k => CS.JuMP.value(k; result=i) for k in Iterators.flatten(values(model.obj_dict)))
+                for i in 1:CS.JuMP.result_count(model)
+          ];  # Array of Dicts of length number of solutions (each Dict a solution)
     return namemapping, sol
 end
 

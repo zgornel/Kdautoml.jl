@@ -1,6 +1,7 @@
 @reexport module KnowledgeBase
 
 using ..TOML
+using ..Random
 using ..DelimitedFiles
 using ..LinearAlgebra  # for `norm` in `rbf_kernel` (utils.jl)
 using ..DataStructures
@@ -24,6 +25,11 @@ export kb_load,
        FeatureProduct, Kernelizer, rbf_kernel,
        change_into_UnivariateFinite, build_ranges
 
+const CS=ConstraintSolver
+const model = CS.Model(CS.optimizer_with_attributes(CS.Optimizer,
+                     "time_limit"=>1000,
+                     "all_solutions"=>true,
+                     "all_optimal_solutions"=>true))
 include("utils.jl")
 include("sat.jl")
 
