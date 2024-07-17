@@ -17,21 +17,7 @@
 # z == qₚ # z = true is bias associated to it (i.e. qₚ==isa_Entytfeature(feature_type)) is true
 # ~qₛ*z == z # condition that associates z (feature type variable) to a condition on the input (i.e. feature_type isa EntityFeature == ~isa(input, EntityFeature))
 #            # as long as z==false, qₛ does not matter; when z==true,
-
-¬(x::Num) = 1-x
-¬(x::Bool) = ~x
-
-
-function _replace_symbol(expr, what, val)
-    MacroTools.postwalk(expr) do ex
-        if what == :x && @capture(ex, x) return :($val)
-        elseif what == :y && @capture(ex, y) return :($val)
-        elseif what == :p && @capture(ex, p) return :($val)
-        elseif what == :z && @capture(ex, z) return :($val)
-        else return ex end
-    end
-end
-
+const CS = ConstraintSolver
 
 """
 Creates a CSP (constraint satisfaction problem) from the data returned from the kb (datakb, see format below) and solves it.
@@ -48,78 +34,44 @@ Creates a CSP (constraint satisfaction problem) from the data returned from the 
                                                     (name = "x6", code=:(x->x^6), preconditions=[:(x->true)])
                                                    ],
                                     ),
- 			   :component_rules => [("x1", "x3")=>:(x==¬y), ("x1", "x4")=>:(x==¬y)],
- 			   :preconditions => [(name="p1", template=:(z == true; z==¬p), code=:(x->begin @info "precond for feature==false"; false; end)),
- 			  				      (name="p2", template=:(z == true; z==p), code=:(x->begin @info "precond2 for feature==true"; true; end))]
  			  )
 """
 function solve_csp(datakb, state)
-    constraints = []
-    namemapping = Dict{Symbol, Dict{String, Num}}()
+    namemapping = Dict{Symbol, Dict{String, CS.VariableRef}}()
+
+    # Initialize model
+    m = CS.Model(CS.optimizer_with_attributes(CS.Optimizer,
+                     "time_limit"=>1000,
+                     "all_solutions"=>true,
+                     "all_optimal_solutions"=>true))
 
     # Map datakb components to variables and retain mapping
+    local xvars
     for (comp, funcs) in get(datakb, :components, Dict())
-        varsymb = gensym()
         n = length(funcs)
-        vars = Num.(Symbolics.variable.(varsymb, 1:n))  # create variables f₁, f₂ ...
-        for v in vars
-            push!(constraints, v ∈ 0:1)
-        end
-        push!(constraints, sum(v for v in vars) ==1)
-        push!(namemapping, comp=>Dict(funcs[i].name=>vars[i] for i in 1:n))
-
-        # Evaluate preconditions for each function
-        preconds = []
-        for ((name, code, hyperparameters, package, preconditions), fsymb) in zip(funcs, vars)
-            for ps in preconditions
-                #ps.code != nothing && begin
-                #    @info "Importing $(ps.package)"
-                #    eval("import $(ps.package)")
-                #end
+        CS.@variable(m, xvars[1:n], Bin) # create variables f₁∈ 0:1, f₂∈ 0:1 ...
+        CS.@constraint(m, sum(xvars) == 1)
+        push!(namemapping, comp=>Dict(funcs[i].name=>xvars[i] for i in 1:n))
+        for (i, ((name, code, hyperparameters, package, preconditions), _)) in enumerate(zip(funcs, xvars))
+            for ps in preconditions  # eval preconditions for each component and add constraints
                 _f = eval(Meta.parse(strip(ps.code)))
                 _fc = Base.invokelatest(_f, (ps.args...))
                 pv = Base.invokelatest(_fc, state)
                 @info "KB(SAT): Executed precondition $(ps.name) => $pv"
-                push!(constraints, fsymb == fsymb * pv)
+                CS.@constraint(m, xvars[i] == xvars[i] * pv)
             end
         end
-    end
-
-    # Process component rules
-    for (nodes, templ) in get(datakb, :component_rules, [])
-        _rule = templ
-        for (comp, v) in datakb[:components]
-            for (i, w) in enumerate(v)
-                w.name == nodes[1] && (_rule = _replace_symbol(_rule, :x, namemapping[comp][w.name]))
-                w.name == nodes[2] && (_rule = _replace_symbol(_rule, :y, namemapping[comp][w.name]))
-            end
-        end
-        push!(constraints, eval(_rule))
-    end
-
-    # Process feature preconditions
-    F_SYMB = gensym()
-    _fs = Num(Symbolics.variable(F_SYMB))
-    push!(constraints, _fs ∈ 0:1)
-    push!(constraints, _fs == true)
-    local ntempl
-    for (name, templ, code) in get(datakb, :preconditions, [])
-        _data = ""  # FAKE
-        pv = Base.invokelatest(eval(code), _data)
-        ntempl = _replace_symbol(templ, :p, pv)
-        ntempl = _replace_symbol(ntempl, :z, Num(Symbolics.variable(F_SYMB)))
-        push!(constraints, eval(ntempl))
     end
 
     # Solve
-    pb = DiscreteCSP(constraints);
-    sol = all_solutions(pb);
-    return namemapping, constraints, sol
+    CS.optimize!(m);
+    sol = [Dict(xvars[j]=>CS.JuMP.value(xvars[j]; result=i) for j in 1:CS.JuMP.num_variables(m)) for i in 1:CS.JuMP.result_count(m)];
+    return namemapping, sol
 end
 
 
-function add_data_to_csp_solution(datakb, namemapping, solutions, props)
-    rnm = Dict{Symbol, Dict{Num,String}}()
+function add_data_to_csp_solution(datakb, namemapping, solutions, components)
+    rnm = Dict{Symbol, Dict{CS.VariableRef,String}}()
     for (k, v) in namemapping
         push!(rnm, k=>Dict(w=>l for (l,w) in v))
     end
@@ -128,11 +80,11 @@ function add_data_to_csp_solution(datakb, namemapping, solutions, props)
         _sol = []
         for (var, bval) in s
             if bval == 1
-                for prop in props
-                    if haskey(rnm[prop], var)
-                        _fname = rnm[prop][var]
-                        _fdata= first(filter(x->x.name==_fname, datakb[:components][prop]))
-                        push!(_sol, prop=>(name=_fdata.name, code=_fdata.code, hyperparameters=_fdata.hyperparameters, package=_fdata.package))
+                for component in components
+                    if haskey(rnm[component], var)
+                        _fname = rnm[component][var]
+                        _fdata= first(filter(x->x.name==_fname, datakb[:components][component]))
+                        push!(_sol, component=>(name=_fdata.name, code=_fdata.code, hyperparameters=_fdata.hyperparameters, package=_fdata.package))
                     end
                 end
             end

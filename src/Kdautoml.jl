@@ -11,7 +11,7 @@ module Kdautoml
     using CSV
     using DataFrames
     using Symbolics
-    using SatisfiabilityInterface
+    using ConstraintSolver
     using AutoHashEquals
     using AbstractTrees
     using MultivariateStats
