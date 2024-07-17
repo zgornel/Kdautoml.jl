@@ -11,7 +11,6 @@ module Kdautoml
     using CSV
     using DataFrames
     using Symbolics
-    using SatisfiabilityInterface
     using AutoHashEquals
     using AbstractTrees
     using MultivariateStats
@@ -38,6 +37,7 @@ module Kdautoml
         # Declare container stuff
     end
 
+    include("si/src/SatisfiabilityInterface.jl")
     include("transition.jl")  # CF - highest level, most abstract, has all top-level definitions
     include("program.jl")     # PE - second level, needs stuff defined previously
     include("kb.jl")          # KB - third level, needs methods defined in the previous two
