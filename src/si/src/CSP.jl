@@ -17,8 +17,8 @@ function ConstraintSatisfactionProblem(constraints)
 
     domains, new_constraints, additional_vars = parse_constraints(constraints)
     # # @show keys(domains)
-    vars = sort(identity.(keys(domains)))
-    additional_vars = sort(identity.(additional_vars))
+    vars = sort(identity.(keys(domains)); by=x->string(x))
+    additional_vars = sort(identity.(additional_vars); by=x->string(x))
 
     return ConstraintSatisfactionProblem(vars, additional_vars, domains, new_constraints)
 end
