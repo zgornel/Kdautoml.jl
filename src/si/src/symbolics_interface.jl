@@ -9,12 +9,16 @@
 
 const DiscreteTypes = Union{Integer, Symbol}
 
-@register_symbolic Base.:∈(x::Num, y::AbstractRange{T} where T<:DiscreteTypes) false
-@register_symbolic Base.:∈(x::Num, y::UnitRange{T} where T<:DiscreteTypes) false  # false prevents defining overloads
-@register_symbolic Base.:∈(x::Num, y::AbstractVector{T} where T<:DiscreteTypes) false
-@register_symbolic Base.:∈(x::Num, y::Vector{T} where T<:DiscreteTypes) false
-@register_symbolic Base.:∈(x::Num, y::Tuple) false
+#@register_symbolic Base.:∈(x::Num, y::AbstractRange{T} where T<:DiscreteTypes) false
+#@register_symbolic Base.:∈(x::Num, y::UnitRange{T} where T<:DiscreteTypes) false  # false prevents defining overloads
+#@register_symbolic Base.:∈(x::Num, y::AbstractVector{T} where T<:DiscreteTypes) false
+#@register_symbolic Base.:∈(x::Num, y::Vector{T} where T<:DiscreteTypes) false
+#@register_symbolic Base.:∈(x::Num, y::Tuple) false
 
+#Backport from https://github.com/dpsanders/SatisfiabilityInterface.jl/pull/37
+@register_symbolic Base.:∈(x::Real, y::UnitRange) false  # false prevents defining overloads
+@register_symbolic Base.:∈(x::Real, y::Vector{Symbol}) false  # false prevents defining overloads
+@register_symbolic Base.:∈(x::Real, y::Vector{Int}) false  # false prevents defining overloads
 # TODO: Varargs ∨
 
 
