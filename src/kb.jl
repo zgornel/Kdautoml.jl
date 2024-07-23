@@ -1,13 +1,14 @@
 @reexport module KnowledgeBase
 
 using ..TOML
+using ..Random
 using ..DelimitedFiles
 using ..LinearAlgebra  # for `norm` in `rbf_kernel` (utils.jl)
 using ..DataStructures
 using ..MLJ
 using ..DataFrames
 using ..Symbolics
-using ..SatisfiabilityInterface
+using ..ConstraintSolver
 using ..MacroTools
 using ..Kdautoml  # needed for KB-defined precondition code in feature synthesis
                   # that when executed, references `Kdautoml`
@@ -24,6 +25,11 @@ export kb_load,
        FeatureProduct, Kernelizer, rbf_kernel,
        change_into_UnivariateFinite, build_ranges
 
+const CS=ConstraintSolver
+const model = CS.Model(CS.optimizer_with_attributes(CS.Optimizer,
+                     "time_limit"=>1000,
+                     "all_solutions"=>true,
+                     "all_optimal_solutions"=>true))
 include("utils.jl")
 include("sat.jl")
 
@@ -172,7 +178,7 @@ function ControlFlow.kb_query(kb, ps_state::T; connection=nothing) where {T<:Tup
 
     # Do the same for preconditioned components, checking preconditions first
     state = (kb=kb, component=component, pipeline=pipeline, piperesults=piperesults)
-    nm, c, s = solve_csp(datakb, state)
+    nm, s = solve_csp(datakb, state)
     sols = add_data_to_csp_solution(datakb, nm, s, Tuple(keys(datakb[:components])))
 end
 
@@ -254,7 +260,7 @@ function ControlFlow.kb_query(kb, fs_state::NamedTuple; connection=nothing)
         end
     end
     datakb = Dict(:components=>component_data)
-    nm, c, s = solve_csp(datakb, fs_state)
+    nm, s = solve_csp(datakb, fs_state)
     sat_sols = add_data_to_csp_solution(datakb, nm, s, Tuple(keys(datakb[:components])))
     #combs = combinatorialize(compile_components(sat_sols, fs_state))
     combs = vcat([combinatorialize(compile_components(s, fs_state)) for s in sat_sols]...)

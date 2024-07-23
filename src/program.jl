@@ -50,6 +50,7 @@ Base.show(io::IO, n::CodeNode) = begin
     end
 end
 
+has_children(node) = !isempty(AbstractTrees.children(node))
 
 function ControlFlow.paths(startnode, endnodeids)
     # Function that shrinks a Vector{CodeNode} to the first occurence
@@ -65,7 +66,7 @@ function ControlFlow.paths(startnode, endnodeids)
     PATHS = Vector{Pair{CodeNode, Vector{CodeNode}}}()
     startnode = first(ordering)
     tmp = [startnode]
-    !AbstractTrees.has_children(startnode) && return Dict(startnode=>[startnode])
+    !has_children(startnode) && return Dict(startnode=>[startnode])
     for node in ordering[begin+1:end]
         #println("CodeNode=$(node.name), tmp=$(map(n->n.name, tmp)))")
         !in(node, AbstractTrees.children(last(tmp))) && (tmp = shrinkto(tmp, node))
@@ -73,7 +74,7 @@ function ControlFlow.paths(startnode, endnodeids)
             #println("Returning paths for $(node.name)!")
             push!(PATHS, node=>vcat(tmp, node))
         else  # another node (if not leaf, track)
-            AbstractTrees.has_children(node) && push!(tmp, node)
+            has_children(node) && push!(tmp, node)
         end
     end
     return PATHS
