@@ -269,10 +269,12 @@ ControlFlow.get_update_nodes(kbnodes, ps_state::Tuple{ControlFlow.AbstractCompon
     component = ps_state[1]
     arguments = hasproperty(component.metadata, :arguments) ? component.metadata.arguments : ()
     updatenodes = ProgramExecution.CodeNode[]
-    for n in kbnodes
-        _, nodedata = n[1]        #TODO: Adapt this to pick up several components if necessary;
-                                  #      Here it is assumed that a single node is returned all the time (no combinatorial)
-        push!(updatenodes, ProgramExecution.CodeNode(nodedata.name, (code=nodedata.code, hyperparameters=nodedata.hyperparameters, package=nodedata.package, arguments=arguments), ProgramExecution.CodeNode[]))
+    if !isempty(Iterators.flatten(kbnodes))
+        for n in kbnodes
+            _, nodedata = n[1]        #TODO: Adapt this to pick up several components if necessary;
+                                      #      Here it is assumed that a single node is returned all the time (no combinatorial)
+            push!(updatenodes, ProgramExecution.CodeNode(nodedata.name, (code=nodedata.code, hyperparameters=nodedata.hyperparameters, package=nodedata.package, arguments=arguments), ProgramExecution.CodeNode[]))
+        end
     end
     return updatenodes
 end

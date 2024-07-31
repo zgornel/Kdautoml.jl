@@ -59,37 +59,39 @@ Creates a CSP (constraint satisfaction problem) from the data returned from the 
 """
 function solve_csp(datakb, state)
     namemapping = Dict{Symbol, Dict{String, CS.VariableRef}}()
-    # Clean model from previous variables and constraints
-    clean_constraints!(model)
-    clean_variables!(model)
-
-    # Map datakb components to variables and retain mapping
-    for (comp, funcs) in get(datakb, :components, Dict())
-        k = randstring(5)
-        n = length(funcs)
-        # Note: the statements below are evaluated as there was no way to interpolate
-        #       dynamically new variable names into the macros @variable and @constraint
-        xvars = gensym()
-        model = Kdautoml.KnowledgeBase.model
-        @eval KnowledgeBase xxv=CS.@variable(model, $xvars[1:$n], Bin)  # create variables f₁∈ 0:1, f₂∈ 0:1 ...
-        @eval KnowledgeBase CS.@constraint(model, sum($xvars) == 1)
-        push!(namemapping, comp=>Dict(funcs[i].name=>xxv[i] for i in 1:n))
-        for (i, ((name, code, hyperparameters, package, preconditions), _)) in enumerate(zip(funcs, xxv))
-            for ps in preconditions  # eval preconditions for each component and add constraints
-                _f = eval(Meta.parse(strip(ps.code)))
-                _fc = Base.invokelatest(_f, (ps.args...))
-                pv = Base.invokelatest(_fc, state)
-                @info "KB(SAT): Executed precondition $(ps.name) => $pv"
-                @eval KnowledgeBase CS.@constraint(model, $xvars[$i] == $xvars[$i] * $pv)
+    sol = []
+    if !isempty(get(datakb, :components, Dict()))
+        # Clean model from previous variables and constraints
+        clean_constraints!(model)
+        clean_variables!(model)
+        # Map datakb components to variables and retain mapping
+        for (comp, funcs) in get(datakb, :components, Dict())
+            k = randstring(5)
+            n = length(funcs)
+            # Note: the statements below are evaluated as there was no way to interpolate
+            #       dynamically new variable names into the macros @variable and @constraint
+            xvars = gensym()
+            model = Kdautoml.KnowledgeBase.model
+            @eval KnowledgeBase xxv=CS.@variable(model, $xvars[1:$n], Bin)  # create variables f₁∈ 0:1, f₂∈ 0:1 ...
+            @eval KnowledgeBase CS.@constraint(model, sum($xvars) == 1)
+            push!(namemapping, comp=>Dict(funcs[i].name=>xxv[i] for i in 1:n))
+            for (i, ((name, code, hyperparameters, package, preconditions), _)) in enumerate(zip(funcs, xxv))
+                for ps in preconditions  # eval preconditions for each component and add constraints
+                    _f = eval(Meta.parse(strip(ps.code)))
+                    _fc = Base.invokelatest(_f, (ps.args...))
+                    pv = Base.invokelatest(_fc, state)
+                    @info "KB(SAT): Executed precondition $(ps.name) => $pv"
+                    @eval KnowledgeBase CS.@constraint(model, $xvars[$i] == $xvars[$i] * $pv)
+                end
             end
         end
-    end
 
-    # Solve
-    CS.optimize!(model);
-    sol = [ Dict(k => CS.JuMP.value(k; result=i) for k in Iterators.flatten(values(model.obj_dict)))
-                for i in 1:CS.JuMP.result_count(model)
-          ];  # Array of Dicts of length number of solutions (each Dict a solution)
+        # Solve
+        CS.optimize!(model);
+        sol = [ Dict(k => CS.JuMP.value(k; result=i) for k in Iterators.flatten(values(model.obj_dict)))
+                    for i in 1:CS.JuMP.result_count(model)
+              ];  # Array of Dicts of length number of solutions (each Dict a solution)
+    end
     return namemapping, sol
 end
 

@@ -20,13 +20,13 @@ function execute_kb_query end
 function build_ps_query(action,
                         kb::Type{KnowledgeBaseNative};
                         precondition_symbols=DEFAULT_PRECONDITION_SYMBOLS)
-    @warn "`build_ps_query` not implemented for kb::$(typeof(kb))"
+    @warn "`build_ps_query` not implemented for kb::$kb"
     return ""
 end
 
 
 function build_fs_query(feature_type, kb::Type{KnowledgeBaseNative})
-    @warn "`build_fs_query` not implemented for kb::$(typeof(kb))"
+    @warn "`build_fs_query` not implemented for kb::$kb"
     return ""
 end
 
