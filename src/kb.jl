@@ -15,11 +15,16 @@ import ..MLJModelInterface
 import ..ControlFlow
 import ..ProgramExecution
 
+
+abstract type AbstractKnowledgeBase end
+
+
 include("mlj_utils.jl")
 include("neo4j.jl")
+include("nativekb.jl")
 include("sat.jl")
 
-export kb_load
+export AbstractKnowledgeBase, kb_load
 
 const CS=ConstraintSolver
 const model = CS.Model(CS.optimizer_with_attributes(CS.Optimizer,
@@ -30,8 +35,225 @@ const model = CS.Model(CS.optimizer_with_attributes(CS.Optimizer,
 const DEFAULT_PRECONDITION_SYMBOLS=(:AbstractPrecondition, :InputPrecondition, :DataPrecondition, :PipelinePrecondition)
 
 
-function kb_load(filepath)
-    TOML.parse(open(filepath))
+function ControlFlow.kb_load(filepath; kb_type=:neo4j, kb_flavour=:pipe_synthesis, connection=nothing)
+    _connection = if kb_type == :neo4j && kb_flavour == :pipe_synthesis && connection == nothing
+        (get_container(PIPESYNTHESIS_CONTAINER_NAME),
+         get_neo4j_user(),
+         get_neo4j_pass())
+    elseif kb_type == :neo4j && kb_flavour == :feature_synthesis && connection == nothing
+        (get_container(FEATURESYNTHESIS_CONTAINER_NAME),
+         get_neo4j_user(),
+         get_neo4j_pass())
+    else
+        connection
+    end
+
+    if kb_type==:neo4j
+        return kb_load(KnowledgeBaseNeo4j, filepath; connection=_connection)
+    elseif kb_type==:native
+        return kb_load(KnowledgeBaseNative, filepath; connection=_connection)
+    else
+        @warn "Unrecognized knowledge base type $kb_type"
+        return nothing
+    end
+end
+
+
+function ControlFlow.kb_load(::Type{KnowledgeBaseNeo4j}, filepath; connection=nothing)
+    KnowledgeBaseNeo4j(TOML.parse(open(filepath)), connection)
+end
+
+
+function ControlFlow.kb_load(::Type{KnowledgeBaseNative}, filepath; connection=nothing)
+    KnowledgeBaseNative(TOML.parse(open(filepath)))  # connection is ignored
+end
+
+
+"""
+Builds kb queries from input data structures, sends them to the kb and
+fetches the results and processes them into response data structures
+with which an constraint problem is built.
+"""
+function ControlFlow.kb_query(kb::K, ps_state::T) where {K<:AbstractKnowledgeBase, T<:Tuple{ControlFlow.AbstractComponent, Vector, Dict}}
+    # Read state into variables
+    component, pipeline, piperesults = ps_state
+
+    # Look into component.metadata.preconditions and check what preconditions use
+    # Precondition options:
+    # • a tuple containing any of the values (:AbstractPrecondition, :InputPrecondition, :DataPrecondition, :PipelinePrecondition)
+    # If the tuple is empty, all preconditions are used.
+    precondition_symbols = if hasproperty(component.metadata, :preconditions)
+                               component.metadata.preconditions
+                           else
+                               DEFAULT_PRECONDITION_SYMBOLS
+                           end
+
+    # Read and parse components (including preconditions)
+    component_name = ControlFlow.namify(component)
+    kb_result = execute_kb_query(kb,
+                          build_ps_query(component_name, K; precondition_symbols);
+                          output=true)
+
+    # Build data structure for constraint solver
+    datakb = build_ps_csp_data(kb_result, component_name, kb)
+
+    # Do the same for preconditioned components, checking preconditions first
+    state = (kb=kb, component=component, pipeline=pipeline, piperesults=piperesults)
+    nm, s = solve_csp(datakb, state)
+    sols = add_data_to_csp_solution(datakb, nm, s, Tuple(keys(datakb[:components])))
+end
+
+
+"""
+Builds kb queries from input data structures, sends them to the kb and
+fetches the results and processes them into response data structures
+with which an constraint problem is built.
+
+# Example for fs_state
+```
+fs_state = (read_table = :Subscriptions,
+         write_table = :Subscriptions,
+         input_feature = :id,
+         input_eltype = Int64,
+         use_vectors = true,
+         input_data = 10×4 DataFrame
+               Row │ id     service          customer  amount
+                   │ Int64  Symbol           String    Float64
+              ─────┼───────────────────────────────────────────
+                 1 │     1  internet_10Mbps  sD6BY       19.99
+                 2 │     2  internet_1Mbps   KwNTd        9.99
+               ...
+                10 │    10  internet_fiber   KwNTd       29.99,
+         agg_column = nothing,
+         mask_column = nothing)
+
+```
+"""
+function ControlFlow.kb_query(kb::K, fs_state::NamedTuple) where K<:AbstractKnowledgeBase
+    _to_string = ft -> last(split(string(ft), "."))
+    kb_result = execute_kb_query(kb,
+                    build_fs_query(_to_string(fs_state.feature_type), K);
+                    output=true)
+
+    datakb = build_fs_csp_data(kb_result, kb)
+
+    nm, s = solve_csp(datakb, fs_state)
+    sat_sols = add_data_to_csp_solution(datakb, nm, s, Tuple(keys(datakb[:components])))
+    #combs = combinatorialize(compile_components(sat_sols, fs_state))
+    combs = vcat([combinatorialize(compile_components(s, fs_state)) for s in sat_sols]...)
+end
+
+
+function compile_components(sol, fs_state)
+    r = Vector{Pair{Symbol, Vector{Expr}}}()
+    for (k, v) in sol  # k is component name, v in named tuple w. code, name, package etc.
+        _f = eval(Meta.parse(strip(v.code)))
+        _v = Base.invokelatest(_f, fs_state)  # _v isa Vector{Expr}
+        push!(r, k => _v)
+     end
+    return r
+end
+
+
+function combinatorialize(v::Vector{Pair{T,S}}) where {T,S}
+    n = mapreduce(p->length(p[2]), *, v)
+    r = [Pair{T, eltype(S)}[] for _ in 1:n]
+    for (i, (k,wi)) in enumerate(v)
+        vals = repeat(wi, div(n, length(wi)))
+        push!.(r, k.=>vals)
+    end
+    return r
+end
+
+
+function build_ps_csp_data(kb_response, component_name, kb)
+    components = make_dict(kb_response)
+    datakb = Dict(:components => MultiDict())
+    for (comp, preconds) in components
+        if haskey(get_recursively(kb, "resources/code/components"), comp)  # component is not abstract
+            # gather precondition code and arguments
+            preconditions = []
+            if !isempty(preconds)
+                for precond in preconds
+                    _pdata = get_recursively(kb, "ontology/preconditions/$precond")
+                    func_name, func_args = _pdata["function"], _pdata["function_args"]
+                    push!(preconditions, (name=precond,
+                                          code=get_recursively(kb, "resources/code/preconditions/$func_name/code"),
+                                          package=get_recursively(kb, "resources/code/preconditions/$func_name/package"),
+                                          args=func_args))
+                end
+            end
+            _data = (name=comp,  # concrete component, not abstract
+                     code=get_recursively(kb, "resources/code/components/$comp/code"),
+                     hyperparameters=get_recursively(kb, "resources/code/components/$comp/hyperparameters"),
+                     package=get_recursively(kb, "resources/code/components/$comp/package"),
+                     preconditions=preconditions)
+            push!(datakb[:components], Symbol(component_name)=>_data)
+        end
+    end
+    return datakb
+end
+
+
+function build_fs_csp_data(kb_response, kb)
+    component_data = MultiDict()
+    for (acomp, dcomp, precond) in eachrow(kb_response)
+        # Build precondition
+        precondition = nothing
+        precond_name = replace(strip(precond), "\""=>"")
+        dcomp_name = replace(strip(dcomp), "\""=>"")
+        if !isempty(precond_name)
+                _pdata = get_recursively(kb, "ontology/preconditions/$precond_name")
+                func_name, func_args = _pdata["function"], _pdata["function_args"]
+                precondition = (name=precond_name,
+                                code=get_recursively(kb, "resources/code/preconditions/$func_name/code"),
+                                args=func_args)
+        end
+
+        # Find discrete components and add preconditions to them or add new entry
+        acomp_symb = Symbol(acomp)
+        pos = findall(v->hasproperty(v, :name)&&v.name==dcomp_name, get(component_data, acomp_symb, []))
+        if isempty(pos)  # add new entry
+            component = (name=dcomp_name,
+                         code=get_recursively(kb, "resources/code/components/$dcomp_name/code"),
+                         hyperparameters=get_recursively(kb, "resources/code/components/$dcomp_name/hyperparameters"),
+                         package=get_recursively(kb, "resources/code/components/$dcomp_name/package"),
+                         preconditions=!isnothing(precondition) ? Any[precondition] : Any[])
+            push!(component_data, acomp_symb=>component)
+        else  # just add precondition
+            for p in pos
+                !isnothing(precondition) && push!(component_data[acomp_symb][p].preconditions, precondition)
+            end
+        end
+    end
+    datakb = Dict(:components=>component_data)
+    return datakb
+end
+
+
+function get_recursively(kb::K, args...; kwargs...) where K<:AbstractKnowledgeBase
+    return get_recursively(kb.data, args...;kwargs...)
+end
+
+function get_recursively(d::Dict, ks; splitter='/', default=nothing)
+    keys = split(strip(isequal(splitter), ks), string(splitter))
+    reduce((d, k)->get(d, k, default), keys, init=d)
+end
+
+
+# Creates a MultiDict from a neo4j matrix result
+function make_dict(m)
+    d= MultiDict{String, String}();
+    for r in eachrow(m)
+        pcond = replace(strip(r[2]), r"\""=>"")
+        if isempty(pcond)
+            !haskey(d, r[1]) && (push!(d, r[1]=>"");
+            pop!(d[r[1]]))  # remove empty string, keep key in MultiDict
+        else
+            push!(d, r[1]=>pcond)
+        end
+    end
+    return d
 end
 
 

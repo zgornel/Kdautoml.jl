@@ -34,9 +34,7 @@ module DeepFeatureSynthesis
     end
 
     function MLJ.transform(dfs::DeepFeatureSynthesisTransformer, _, data)
-        kb = open(dfs.path) do io
-            TOML.parse(io)
-        end
+        kb = ControlFlow.kb_load(dfs.path; kb_type=:neo4j, kb_flavour=:feature_synthesis)  #TODO: make this configurable
         #kb = TOML.parse(open(dfs.path))
         features = deep_feature_synthesis(data, dfs.max_depth; kb=kb, calculate=dfs.calculate)
         df_features, _ = to_df(features)
