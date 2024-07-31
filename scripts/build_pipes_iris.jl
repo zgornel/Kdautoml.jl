@@ -7,7 +7,7 @@ using Kdautoml
 BASE_PATH =joinpath(dirname(@__FILE__), "..") 
 kbpath = joinpath(BASE_PATH, "data/knowledge/pipe_synthesis.toml")
 @info "Loading KB at $kbpath"
-kb = Kdautoml.kb_load(kbpath)
+kb = Kdautoml.kb_load(kbpath; kb_type=:neo4j, kb_flavour=:pipe_synthesis)
 
 # Declare and initialize program
 pipes = Kdautoml.Pipelines(;backend=:Dagger)  # header is automaticall added

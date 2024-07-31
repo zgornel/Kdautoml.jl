@@ -10,7 +10,6 @@ module Kdautoml
     using Combinatorics
     using CSV
     using DataFrames
-    using Symbolics
     using ConstraintSolver
     using AutoHashEquals
     using AbstractTrees

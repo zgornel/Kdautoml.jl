@@ -1,45 +1,8 @@
-PIPESYNTHESIS_CONTAINER_NAME = "neo4j_pipesynthesis_kb"
-FEATURESYNTHESIS_CONTAINER_NAME = "neo4j_featuresynthesis_kb"
-
-# TODO: Make this parametric
-get_neo4j_user() = get(ENV, "NEO4J_USER", "neo4j")
-get_neo4j_pass() = get(ENV, "NEO4J_PASS", "test")
-get_container(container_name) = chop(read(pipeline(`docker ps `,`grep "$container_name"`, `awk '{print $1}'`), String))
-
 # Utility functions
-function get_recursively(d, ks; splitter='/', default=nothing)
-    keys = split(strip(isequal(splitter), ks), string(splitter))
-    reduce((d, k)->get(d, k, default), keys, init=d)
-end
-
-
-#TODO: Check docker is installed, container valid, etc
-function cypher_shell(container, user, pass, cypher_cmd; wait=true, output=false)
-    @info "KB: Querying with $(length(IOBuffer(cypher_cmd).data)) bytes KB in container $container..."
-    @debug "KB: Query:\n$cypher_cmd"
-    full_cmd = `docker exec --interactive $container cypher-shell --format plain -u $user -p $pass $cypher_cmd`
-    if !output
-        run(full_cmd, wait=wait)
-        return nothing
-    else
-        return read(full_cmd, String)
-    end
-    #if !isempty(result)
-    #    d,h = readdlm(IOBuffer(result), ',', String, '\n', header=true)
-    #    @show d, h
-    #    return (header=h, data=d)
-    #else
-    #    return nothing
-    #end
-end
-
-
-# Function that parses neo4j results into a Matrix{String}
-parse_neo4j_result(result) = if !isempty(result)
-        return String.(readdlm(IOBuffer(result), ',','\n';header=true)[1])
-    else
-        return String[]
-    end
+export build_and_run_ml_pipeline,
+       df2vec, xor_linear_separability,
+       FeatureProduct, Kernelizer, rbf_kernel,
+       change_into_UnivariateFinite, build_ranges
 
 # Function that takes the memory of a generated program
 # builds a pipeline, trains and executes it

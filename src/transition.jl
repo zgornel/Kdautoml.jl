@@ -3,7 +3,7 @@
 using ..AbstractTrees
 
 export paths, prune!, build, execute, # PE interface
-       kb_query, # KB interface
+       kb_load, kb_query, # KB interface
        # top-level symbols (imported by KB)
        transition, namify,
        FSMTransitionError, AbstractState, NoData, Data, ModelableData, Model, End,
@@ -23,6 +23,7 @@ function execute end
 
 # KnowledgeBase interface
 # i.e. functions that need to be have methods in the `KnowledgeBase` module
+function kb_load end
 function kb_query end
 function get_update_nodes end
 
@@ -36,8 +37,7 @@ function transition(state::AbstractState,
                     component::AbstractComponent;
                     kb=nothing,
                     pipelines=nothing,
-                    printbuffer="__tree__",
-                    connection=nothing)
+                    printbuffer="__tree__")
     if kb == nothing || pipelines == nothing
         @error "`kb` and `pipelines` need to be provided"
     end
@@ -54,7 +54,7 @@ function transition(state::AbstractState,
 
         # create query - sends name of pipe leaf (last component) to query creation
         ps_state = (component, treepath, pipelines.artifacts)
-        kb_result = kb_query(kb, ps_state; connection)
+        kb_result = kb_query(kb, ps_state)
 
         # Update pipelines
         updatenodes = get_update_nodes(kb_result, ps_state)

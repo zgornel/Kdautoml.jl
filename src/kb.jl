@@ -7,7 +7,6 @@ using ..LinearAlgebra  # for `norm` in `rbf_kernel` (utils.jl)
 using ..DataStructures
 using ..MLJ
 using ..DataFrames
-using ..Symbolics
 using ..ConstraintSolver
 using ..MacroTools
 using ..Kdautoml  # needed for KB-defined precondition code in feature synthesis
@@ -16,71 +15,57 @@ import ..MLJModelInterface
 import ..ControlFlow
 import ..ProgramExecution
 
-export kb_load,
-       get_container, get_neo4j_user, get_neo4j_pass,
-       kb_to_neo4j_statements, cypher_shell,
-       PIPESYNTHESIS_CONTAINER_NAME, FEATURESYNTHESIS_CONTAINER_NAME,
-       build_and_run_ml_pipeline,
-       df2vec, xor_linear_separability,
-       FeatureProduct, Kernelizer, rbf_kernel,
-       change_into_UnivariateFinite, build_ranges
+
+abstract type AbstractKnowledgeBase end
+
+
+include("mlj_utils.jl")
+include("neo4j.jl")
+include("nativekb.jl")
+include("sat.jl")
+
+export AbstractKnowledgeBase, kb_load
 
 const CS=ConstraintSolver
 const model = CS.Model(CS.optimizer_with_attributes(CS.Optimizer,
-                     "time_limit"=>1000,
-                     "all_solutions"=>true,
-                     "all_optimal_solutions"=>true))
-include("utils.jl")
-include("sat.jl")
+                       "time_limit"=>1000,
+                       "all_solutions"=>true,
+                       "all_optimal_solutions"=>true))
 
 const DEFAULT_PRECONDITION_SYMBOLS=(:AbstractPrecondition, :InputPrecondition, :DataPrecondition, :PipelinePrecondition)
 
-function kb_load(filepath)
-    TOML.parse(open(filepath))
+
+function ControlFlow.kb_load(filepath; kb_type=:neo4j, kb_flavour=:pipe_synthesis, connection=nothing)
+    _connection = if kb_type == :neo4j && kb_flavour == :pipe_synthesis && connection == nothing
+        (get_container(PIPESYNTHESIS_CONTAINER_NAME),
+         get_neo4j_user(),
+         get_neo4j_pass())
+    elseif kb_type == :neo4j && kb_flavour == :feature_synthesis && connection == nothing
+        (get_container(FEATURESYNTHESIS_CONTAINER_NAME),
+         get_neo4j_user(),
+         get_neo4j_pass())
+    else
+        connection
+    end
+
+    if kb_type==:neo4j
+        return kb_load(KnowledgeBaseNeo4j, filepath; connection=_connection)
+    elseif kb_type==:native
+        return kb_load(KnowledgeBaseNative, filepath; connection=_connection)
+    else
+        @warn "Unrecognized knowledge base type $kb_type"
+        return nothing
+    end
 end
 
 
-# Returns a vector of statements that can be ran by cypher_shell
-function kb_to_neo4j_statements(kb)
-    STMTs = String[]
+function ControlFlow.kb_load(::Type{KnowledgeBaseNeo4j}, filepath; connection=nothing)
+    KnowledgeBaseNeo4j(TOML.parse(open(filepath)), connection)
+end
 
-    # Template statement creation
-    component_node_template(node_label) = "CREATE (n:$node_label)"
-    #TODO(Corneliu): Check whether it makes sense to add the function code and args
-    # in the neo4j db or not; at this point type to string conversion is difficult
-    # and potentially not needed.
-    # '0c3586a' is the latest commit supporting precondition func+args in db
-    precondition_node_template(node_label, func, args) = "CREATE (n:$node_label)"
-    relation_template(src, dst, rel) = "MATCH (a:$src), (b:$dst) CREATE (a)-[r:$rel]->(b)"
 
-    # Create component nodes
-    component_nodes = kb["ontology"]["components"]
-    for node in keys(component_nodes)
-        push!(STMTs, component_node_template(node))
-    end
-
-    # Create precondition nodes
-    precondition_nodes = kb["ontology"]["preconditions"]
-    for node in keys(precondition_nodes)
-        if haskey(precondition_nodes[node], "function")
-            # Preconditions with callback
-            push!(STMTs, precondition_node_template(node,
-                precondition_nodes[node]["function"],
-                string(precondition_nodes[node]["function_args"])))
-        else
-            # Preconditions without callback
-            push!(STMTs, component_node_template(node))
-        end
-    end
-
-    # Create relations
-    relations = kb["ontology"]["relations"]
-    for (relation, relargs) in relations
-        for (src, dst) in relargs["data"]
-            push!(STMTs, relation_template(src, dst, relation))
-        end
-    end
-    return STMTs
+function ControlFlow.kb_load(::Type{KnowledgeBaseNative}, filepath; connection=nothing)
+    KnowledgeBaseNative(TOML.parse(open(filepath)))  # connection is ignored
 end
 
 
@@ -89,92 +74,28 @@ Builds kb queries from input data structures, sends them to the kb and
 fetches the results and processes them into response data structures
 with which an constraint problem is built.
 """
-function ControlFlow.kb_query(kb, ps_state::T; connection=nothing) where {T<:Tuple{ControlFlow.AbstractComponent, Vector, Dict}}
-
+function ControlFlow.kb_query(kb::K, ps_state::T) where {K<:AbstractKnowledgeBase, T<:Tuple{ControlFlow.AbstractComponent, Vector, Dict}}
     # Read state into variables
     component, pipeline, piperesults = ps_state
-
-    # Creates a MultiDict from a neo4j matrix result
-    make_dict(m) = begin
-        d= MultiDict{String, String}();
-        for r in eachrow(m)
-            pcond = replace(strip(r[2]), r"\""=>"")
-            if isempty(pcond)
-                !haskey(d, r[1]) && (push!(d, r[1]=>"");
-                pop!(d[r[1]]))  # remove empty string, keep key in MultiDict
-            else
-                push!(d, r[1]=>pcond)
-            end
-        end
-        return d
-    end
 
     # Look into component.metadata.preconditions and check what preconditions use
     # Precondition options:
     # • a tuple containing any of the values (:AbstractPrecondition, :InputPrecondition, :DataPrecondition, :PipelinePrecondition)
     # If the tuple is empty, all preconditions are used.
-
-    # Functions that build queries
-    #   Note: the -[:LINK*0..]- return nodes 0 or more LINKs away. Useful to return target node along with linked nodes
     precondition_symbols = if hasproperty(component.metadata, :preconditions)
                                component.metadata.preconditions
                            else
                                DEFAULT_PRECONDITION_SYMBOLS
                            end
-    function f_query_components(action; precondition_symbols=DEFAULT_PRECONDITION_SYMBOLS)
-        symb_p = "p"
-        where_parts = ["($symb_p)-[:ISA]->(:$p)" for p in precondition_symbols]
-        where_clause = "WHERE " * join(where_parts, " OR ")
-        query = """
-            // list of nodes selected by specific preconditions
-            MATCH ($symb_p)<-[:PRECONDITIONED_BY]-(n)-[:ISA*0..]->(:$action)
-            $where_clause
-            UNWIND labels(n) AS nl UNWIND labels($symb_p) AS $(symb_p)l
-            RETURN nl, $(symb_p)l
-            // list of all nodes (equivalent to rest of preconditions ignored i.e. set to true)
-            UNION
-            MATCH (n)-[:ISA*0..]->(:$action)
-            UNWIND labels(n) AS nl unwind "" as $(symb_p)l
-            RETURN nl, $(symb_p)l
-            """
-       return query
-    end
 
     # Read and parse components (including preconditions)
     component_name = ControlFlow.namify(component)
-    connection == nothing && (connection = (get_container(PIPESYNTHESIS_CONTAINER_NAME),
-                                            get_neo4j_user(),
-                                            get_neo4j_pass())
-                             )
-    _r = cypher_shell(connection...,
-                      f_query_components(component_name; precondition_symbols);
-                      output=true)
-    components = make_dict(parse_neo4j_result(_r))
+    kb_result = execute_kb_query(kb,
+                          build_ps_query(component_name, K; precondition_symbols);
+                          output=true)
 
     # Build data structure for constraint solver
-    datakb = Dict(:components => MultiDict())
-    for (comp, preconds) in components
-        if haskey(get_recursively(kb, "resources/code/components"), comp)  # component is not abstract
-            # gather precondition code and arguments
-            preconditions = []
-            if !isempty(preconds)
-                for precond in preconds
-                    _pdata = get_recursively(kb, "ontology/preconditions/$precond")
-                    func_name, func_args = _pdata["function"], _pdata["function_args"]
-                    push!(preconditions, (name=precond,
-                                          code=get_recursively(kb, "resources/code/preconditions/$func_name/code"),
-                                          package=get_recursively(kb, "resources/code/preconditions/$func_name/package"),
-                                          args=func_args))
-                end
-            end
-            _data = (name=comp,  # concrete component, not abstract
-                     code=get_recursively(kb, "resources/code/components/$comp/code"),
-                     hyperparameters=get_recursively(kb, "resources/code/components/$comp/hyperparameters"),
-                     package=get_recursively(kb, "resources/code/components/$comp/package"),
-                     preconditions=preconditions)
-            push!(datakb[:components], Symbol(component_name)=>_data)
-        end
-    end
+    datakb = build_ps_csp_data(kb_result, component_name, kb)
 
     # Do the same for preconditioned components, checking preconditions first
     state = (kb=kb, component=component, pipeline=pipeline, piperesults=piperesults)
@@ -208,29 +129,75 @@ fs_state = (read_table = :Subscriptions,
 
 ```
 """
-function ControlFlow.kb_query(kb, fs_state::NamedTuple; connection=nothing)
-    f_query_components(feature_type) = """
-        MATCH (n:$feature_type)-[:HASA]->(ac)<-[:ISA*]-(c)-[:PRECONDITIONED_BY]->(p)
-        UNWIND labels(ac) as acl UNWIND labels(c) as cl UNWIND labels(p) as pl
-        RETURN acl, cl, pl
-        UNION
-        MATCH (n:$feature_type)-[:HASA]->(ac)<-[:ISA*]-(c) WHERE NOT (c)<-[:PRECONDITIONED_BY]->()
-        UNWIND labels(ac) as acl UNWIND labels(c) as cl UNWIND "" as pl
-        RETURN acl, cl, pl
-        """
-
+function ControlFlow.kb_query(kb::K, fs_state::NamedTuple) where K<:AbstractKnowledgeBase
     _to_string = ft -> last(split(string(ft), "."))
-    connection == nothing && (connection = (get_container(FEATURESYNTHESIS_CONTAINER_NAME),
-                                            get_neo4j_user(),
-                                            get_neo4j_pass())
-                             )
-    _r = cypher_shell(connection...,
-                      f_query_components(_to_string(fs_state.feature_type));
-                      output=true)
-    _r = parse_neo4j_result(_r)
+    kb_result = execute_kb_query(kb,
+                    build_fs_query(_to_string(fs_state.feature_type), K);
+                    output=true)
 
+    datakb = build_fs_csp_data(kb_result, kb)
+
+    nm, s = solve_csp(datakb, fs_state)
+    sat_sols = add_data_to_csp_solution(datakb, nm, s, Tuple(keys(datakb[:components])))
+    #combs = combinatorialize(compile_components(sat_sols, fs_state))
+    combs = vcat([combinatorialize(compile_components(s, fs_state)) for s in sat_sols]...)
+end
+
+
+function compile_components(sol, fs_state)
+    r = Vector{Pair{Symbol, Vector{Expr}}}()
+    for (k, v) in sol  # k is component name, v in named tuple w. code, name, package etc.
+        _f = eval(Meta.parse(strip(v.code)))
+        _v = Base.invokelatest(_f, fs_state)  # _v isa Vector{Expr}
+        push!(r, k => _v)
+     end
+    return r
+end
+
+
+function combinatorialize(v::Vector{Pair{T,S}}) where {T,S}
+    n = mapreduce(p->length(p[2]), *, v)
+    r = [Pair{T, eltype(S)}[] for _ in 1:n]
+    for (i, (k,wi)) in enumerate(v)
+        vals = repeat(wi, div(n, length(wi)))
+        push!.(r, k.=>vals)
+    end
+    return r
+end
+
+
+function build_ps_csp_data(kb_response, component_name, kb)
+    components = make_dict(kb_response)
+    datakb = Dict(:components => MultiDict())
+    for (comp, preconds) in components
+        if haskey(get_recursively(kb, "resources/code/components"), comp)  # component is not abstract
+            # gather precondition code and arguments
+            preconditions = []
+            if !isempty(preconds)
+                for precond in preconds
+                    _pdata = get_recursively(kb, "ontology/preconditions/$precond")
+                    func_name, func_args = _pdata["function"], _pdata["function_args"]
+                    push!(preconditions, (name=precond,
+                                          code=get_recursively(kb, "resources/code/preconditions/$func_name/code"),
+                                          package=get_recursively(kb, "resources/code/preconditions/$func_name/package"),
+                                          args=func_args))
+                end
+            end
+            _data = (name=comp,  # concrete component, not abstract
+                     code=get_recursively(kb, "resources/code/components/$comp/code"),
+                     hyperparameters=get_recursively(kb, "resources/code/components/$comp/hyperparameters"),
+                     package=get_recursively(kb, "resources/code/components/$comp/package"),
+                     preconditions=preconditions)
+            push!(datakb[:components], Symbol(component_name)=>_data)
+        end
+    end
+    return datakb
+end
+
+
+function build_fs_csp_data(kb_response, kb)
     component_data = MultiDict()
-    for (acomp, dcomp, precond) in eachrow(_r)
+    for (acomp, dcomp, precond) in eachrow(kb_response)
         # Build precondition
         precondition = nothing
         precond_name = replace(strip(precond), "\""=>"")
@@ -260,30 +227,33 @@ function ControlFlow.kb_query(kb, fs_state::NamedTuple; connection=nothing)
         end
     end
     datakb = Dict(:components=>component_data)
-    nm, s = solve_csp(datakb, fs_state)
-    sat_sols = add_data_to_csp_solution(datakb, nm, s, Tuple(keys(datakb[:components])))
-    #combs = combinatorialize(compile_components(sat_sols, fs_state))
-    combs = vcat([combinatorialize(compile_components(s, fs_state)) for s in sat_sols]...)
+    return datakb
 end
 
-function compile_components(sol, fs_state)
-    r = Vector{Pair{Symbol, Vector{Expr}}}()
-    for (k, v) in sol  # k is component name, v in named tuple w. code, name, package etc.
-        _f = eval(Meta.parse(strip(v.code)))
-        _v = Base.invokelatest(_f, fs_state)  # _v isa Vector{Expr}
-        push!(r, k => _v)
-     end
-    return r
+
+function get_recursively(kb::K, args...; kwargs...) where K<:AbstractKnowledgeBase
+    return get_recursively(kb.data, args...;kwargs...)
 end
 
-function combinatorialize(v::Vector{Pair{T,S}}) where {T,S}
-    n = mapreduce(p->length(p[2]), *, v)
-    r = [Pair{T, eltype(S)}[] for _ in 1:n]
-    for (i, (k,wi)) in enumerate(v)
-        vals = repeat(wi, div(n, length(wi)))
-        push!.(r, k.=>vals)
+function get_recursively(d::Dict, ks; splitter='/', default=nothing)
+    keys = split(strip(isequal(splitter), ks), string(splitter))
+    reduce((d, k)->get(d, k, default), keys, init=d)
+end
+
+
+# Creates a MultiDict from a neo4j matrix result
+function make_dict(m)
+    d= MultiDict{String, String}();
+    for r in eachrow(m)
+        pcond = replace(strip(r[2]), r"\""=>"")
+        if isempty(pcond)
+            !haskey(d, r[1]) && (push!(d, r[1]=>"");
+            pop!(d[r[1]]))  # remove empty string, keep key in MultiDict
+        else
+            push!(d, r[1]=>pcond)
+        end
     end
-    return r
+    return d
 end
 
 
@@ -299,10 +269,12 @@ ControlFlow.get_update_nodes(kbnodes, ps_state::Tuple{ControlFlow.AbstractCompon
     component = ps_state[1]
     arguments = hasproperty(component.metadata, :arguments) ? component.metadata.arguments : ()
     updatenodes = ProgramExecution.CodeNode[]
-    for n in kbnodes
-        _, nodedata = n[1]        #TODO: Adapt this to pick up several components if necessary;
-                                  #      Here it is assumed that a single node is returned all the time (no combinatorial)
-        push!(updatenodes, ProgramExecution.CodeNode(nodedata.name, (code=nodedata.code, hyperparameters=nodedata.hyperparameters, package=nodedata.package, arguments=arguments), ProgramExecution.CodeNode[]))
+    if !isempty(Iterators.flatten(kbnodes))
+        for n in kbnodes
+            _, nodedata = n[1]        #TODO: Adapt this to pick up several components if necessary;
+                                      #      Here it is assumed that a single node is returned all the time (no combinatorial)
+            push!(updatenodes, ProgramExecution.CodeNode(nodedata.name, (code=nodedata.code, hyperparameters=nodedata.hyperparameters, package=nodedata.package, arguments=arguments), ProgramExecution.CodeNode[]))
+        end
     end
     return updatenodes
 end
