@@ -1,7 +1,7 @@
 name = "Kdautoml"
 uuid = "fc32655e-c63e-4c7e-8b56-0cfc28f9e13a"
 authors = ["Corneliu Cofaru <corneliu.cofaru@vub.be>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
