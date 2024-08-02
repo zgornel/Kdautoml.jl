@@ -5,7 +5,10 @@
     { "from": "KNOWLEDGE_SYSTEM", "to": "PROGRAM_EXECUTION"},
     { "from": "PROGRAM_EXECUTION", "to": "CONTROL_FLOW"},
     { "from": "PROGRAM_EXECUTION", "to": "PROGRAM_EXECUTION"},
-    { "from": "CONTROL_FLOW", "to": "CONTROL_FLOW"}
+    { "from": "CONTROL_FLOW", "to": "CONTROL_FLOW"},
+    { "from": "DFS", "to": "CONTROL_FLOW"},
+    { "from": "DFS", "to": "KNOWLEDGE_SYSTEM"},
+    { "from": "DFS", "to": "DFS"}
   ],
   "Components": [
     {
@@ -32,6 +35,15 @@
         {
           "type": "FileList",
           "value": ["src/ks.jl", "src/solver.jl", "src/kb_neo4j.jl", "src/kb_native.jl", "src/mlj_utils.jl"]
+        }
+      ]
+    },
+    {
+      "name": "DFS",
+      "sources": [
+        {
+          "type": "FileList",
+          "value": ["src/dfs/DeepFeatureSynthesis.jl", "src/dfs/features.jl", "src/dfs/traversal.jl"]
         }
       ]
     }
