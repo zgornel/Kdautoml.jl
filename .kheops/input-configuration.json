@@ -1,8 +1,8 @@
 {
   "Rules": [
-    { "from": "KNOWLEDGE_BASE", "to": "CONTROL_FLOW"},
-    { "from": "KNOWLEDGE_BASE", "to": "KNOWLEDGE_BASE"},
-    { "from": "KNOWLEDGE_BASE", "to": "PROGRAM_EXECUTION"},
+    { "from": "KNOWLEDGE_SYSTEM", "to": "CONTROL_FLOW"},
+    { "from": "KNOWLEDGE_SYSTEM", "to": "KNOWLEDGE_SYSTEM"},
+    { "from": "KNOWLEDGE_SYSTEM", "to": "PROGRAM_EXECUTION"},
     { "from": "PROGRAM_EXECUTION", "to": "CONTROL_FLOW"},
     { "from": "PROGRAM_EXECUTION", "to": "PROGRAM_EXECUTION"},
     { "from": "CONTROL_FLOW", "to": "CONTROL_FLOW"}
@@ -22,16 +22,16 @@
       "sources": [
         {
           "type": "FileList",
-          "value": ["src/automaton.jl", "src/transition.jl"]
+          "value": ["src/automaton.jl", "src/control.jl"]
         }
       ]
     },
     {
-      "name": "KNOWLEDGE_BASE",
+      "name": "KNOWLEDGE_SYSTEM",
       "sources": [
         {
           "type": "FileList",
-          "value": ["src/kb.jl", "src/sat.jl", "src/utils.jl"]
+          "value": ["src/ks.jl", "src/solver.jl", "src/kb_neo4j.jl", "src/kb_native.jl", "src/mlj_utils.jl"]
         }
       ]
     }

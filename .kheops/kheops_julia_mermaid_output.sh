@@ -10,7 +10,7 @@ fi
 echo "Running script in ${SCRIPT_DIR} using Kheops@${KHEOPS_DIR}"
 julia "${KHEOPS_DIR}/kheopscliw.jl" \
     --project-dir "${SCRIPT_DIR}/src" \
-    --config-path ./input-configuration.json \
+    --config-path "${SCRIPT_DIR}/.kheops/input-configuration.json" \
     --input-parser julia \
     --output-type diagram \
     --diagram-type file \
