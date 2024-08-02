@@ -37,9 +37,9 @@ module Kdautoml
         # Declare container stuff
     end
 
-    include("transition.jl")  # CF - highest level, most abstract, has all top-level definitions
+    include("control.jl")     # CF - highest level, most abstract, has all top-level definitions
     include("program.jl")     # PE - second level, needs stuff defined previously
-    include("kb.jl")          # KB - third level, needs methods defined in the previous two
+    include("ks.jl")          # KS - third level, needs methods defined in the previous two
     include("dfs/DeepFeatureSynthesis.jl") # second level also, defines KB query interface for features
 
 end # module

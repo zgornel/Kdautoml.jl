@@ -21,8 +21,8 @@ function build end
 function execute end
 
 
-# KnowledgeBase interface
-# i.e. functions that need to be have methods in the `KnowledgeBase` module
+# KnowledgeSystem interface
+# i.e. functions that need to be have methods in the `KnowledgeSystem` module
 function kb_load end
 function kb_query end
 function get_update_nodes end

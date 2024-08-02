@@ -17,7 +17,30 @@
 # z == qₚ # z = true is bias associated to it (i.e. qₚ==isa_Entytfeature(feature_type)) is true
 # ~qₛ*z == z # condition that associates z (feature type variable) to a condition on the input (i.e. feature_type isa EntityFeature == ~isa(input, EntityFeature))
 #            # as long as z==false, qₛ does not matter; when z==true,
+@reexport module KSSolver
+
+using ...Random
+using ...DelimitedFiles
+using ...LinearAlgebra  # for `norm` in `rbf_kernel` (utils.jl)
+using ...DataStructures
+using ...MLJ
+using ...DataFrames
+using ...MultivariateStats
+using ...ConstraintSolver
+using ...MacroTools
+using ...Kdautoml  # needed for KB-defined precondition code in feature synthesis
+                  # that when executed, references `Kdautoml`
+
+import ..KnowledgeSystem  # to extent API
+
+
 const CS = ConstraintSolver
+
+const CSMODEL = CS.Model(CS.optimizer_with_attributes(CS.Optimizer,
+                    "time_limit"=>1000,
+                    "all_solutions"=>true,
+                    "all_optimal_solutions"=>true))
+
 
 function clean_variables!(model)
     var_names = keys(CS.JuMP.object_dictionary(model))
@@ -31,14 +54,15 @@ function clean_variables!(model)
 end
 
 function clean_constraints!(model)
-    for ct in ConstraintSolver.JuMP.list_of_constraint_types(model)
-        for c in ConstraintSolver.JuMP.all_constraints(model, ct...)
-            cn = Symbol(ConstraintSolver.JuMP.name(c))
-            ConstraintSolver.JuMP.delete(model, c)
-            ConstraintSolver.JuMP.unregister(model, cn)
+    for ct in CS.JuMP.list_of_constraint_types(model)
+        for c in CS.JuMP.all_constraints(model, ct...)
+            cn = Symbol(CS.JuMP.name(c))
+            CS.JuMP.delete(model, c)
+            CS.JuMP.unregister(model, cn)
         end
     end
 end
+
 
 """
 Creates a CSP (constraint satisfaction problem) from the data returned from the kb (datakb, see format below) and solves it.
@@ -57,13 +81,13 @@ Creates a CSP (constraint satisfaction problem) from the data returned from the 
                                     ),
  			  )
 """
-function solve_csp(datakb, state)
+function KnowledgeSystem.solve_csp(datakb, state)
     namemapping = Dict{Symbol, Dict{String, CS.VariableRef}}()
     sol = []
     if !isempty(get(datakb, :components, Dict()))
         # Clean model from previous variables and constraints
-        clean_constraints!(model)
-        clean_variables!(model)
+        clean_constraints!(CSMODEL)
+        clean_variables!(CSMODEL)
         # Map datakb components to variables and retain mapping
         for (comp, funcs) in get(datakb, :components, Dict())
             k = randstring(5)
@@ -71,32 +95,31 @@ function solve_csp(datakb, state)
             # Note: the statements below are evaluated as there was no way to interpolate
             #       dynamically new variable names into the macros @variable and @constraint
             xvars = gensym()
-            model = Kdautoml.KnowledgeBase.model
-            @eval KnowledgeBase xxv=CS.@variable(model, $xvars[1:$n], Bin)  # create variables f₁∈ 0:1, f₂∈ 0:1 ...
-            @eval KnowledgeBase CS.@constraint(model, sum($xvars) == 1)
+            @eval KSSolver xxv = CS.@variable(CSMODEL, $xvars[1:$n], Bin)  # create variables f₁∈ 0:1, f₂∈ 0:1 ...
+            @eval KSSolver CS.@constraint(CSMODEL, sum($xvars) == 1)
             push!(namemapping, comp=>Dict(funcs[i].name=>xxv[i] for i in 1:n))
             for (i, ((name, code, hyperparameters, package, preconditions), _)) in enumerate(zip(funcs, xxv))
                 for ps in preconditions  # eval preconditions for each component and add constraints
                     _f = eval(Meta.parse(strip(ps.code)))
                     _fc = Base.invokelatest(_f, (ps.args...))
                     pv = Base.invokelatest(_fc, state)
-                    @info "KB(SAT): Executed precondition $(ps.name) => $pv"
-                    @eval KnowledgeBase CS.@constraint(model, $xvars[$i] == $xvars[$i] * $pv)
+                    @info "CS: Executed precondition $(ps.name) => $pv"
+                    @eval KSSolver CS.@constraint(CSMODEL, $xvars[$i] == $xvars[$i] * $pv)
                 end
             end
         end
 
         # Solve
-        CS.optimize!(model);
-        sol = [ Dict(k => CS.JuMP.value(k; result=i) for k in Iterators.flatten(values(model.obj_dict)))
-                    for i in 1:CS.JuMP.result_count(model)
+        CS.optimize!(CSMODEL);
+        sol = [ Dict(k => CS.JuMP.value(k; result=i) for k in Iterators.flatten(values(CSMODEL.obj_dict)))
+                    for i in 1:CS.JuMP.result_count(CSMODEL)
               ];  # Array of Dicts of length number of solutions (each Dict a solution)
     end
     return namemapping, sol
 end
 
 
-function add_data_to_csp_solution(datakb, namemapping, solutions, components)
+function KnowledgeSystem.add_data_to_csp_solution(datakb, namemapping, solutions, components)
     rnm = Dict{Symbol, Dict{CS.VariableRef,String}}()
     for (k, v) in namemapping
         push!(rnm, k=>Dict(w=>l for (l,w) in v))
@@ -119,3 +142,5 @@ function add_data_to_csp_solution(datakb, namemapping, solutions, components)
     end
     return sols
 end
+
+end  # module
