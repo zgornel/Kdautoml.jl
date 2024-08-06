@@ -18,7 +18,7 @@ module DeepFeatureSynthesis
     using MacroTools
     using Graphs
     using MetaGraphs
-    import ..MLJ
+    import MLJ
     using ..ControlFlow  # `kb_query` is defined in `ControlFlow`
 
     export AbstractFeature, deep_feature_synthesis

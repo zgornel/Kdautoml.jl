@@ -1,18 +1,18 @@
 @reexport module KnowledgeSystem
 
-using ..TOML                # used here
-using ..DelimitedFiles      # for `kb_neo4j.jl`, `kb_native.jl`
-using ..Reexport            # for KSSolver to use `@reexport`
-using ..DataStructures      # used here
+using TOML                # used here
+using DelimitedFiles      # for `kb_neo4j.jl`, `kb_native.jl`
+using Reexport            # for KSSolver to use `@reexport`
+using DataStructures      # used here
 import ..ControlFlow        # to extend API
 import ..ProgramExecution   # to call API
 
 
 # Utils that extent MLJ for use in KnowledgeBases
-using ..MultivariateStats
-using ..DataFrames
-using ..MLJ
-import ..MLJModelInterface
+using MultivariateStats
+using DataFrames
+using MLJ
+import MLJModelInterface
 include("mlj_utils.jl")
 
 

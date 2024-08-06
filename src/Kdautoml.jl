@@ -1,26 +1,5 @@
 module Kdautoml
-    using Random
-    using Statistics
-    using TOML
-    using DelimitedFiles
-    using LinearAlgebra
     using Reexport
-    using MacroTools
-    using DataStructures
-    using Combinatorics
-    using CSV
-    using DataFrames
-    using ConstraintSolver
-    using AutoHashEquals
-    using AbstractTrees
-    using MultivariateStats
-    using StatsBase
-    using MutableNamedTuples
-    using Tables
-    using MLJ
-    using MLJModelInterface
-    import AbstractTrees: children, printnode
-    import Base: push!, pop!
 
     export DeepFeatureSynthesis,
            AbstractComponent,

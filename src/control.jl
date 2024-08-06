@@ -1,6 +1,6 @@
 @reexport module ControlFlow
 
-using ..AbstractTrees
+using AbstractTrees
 
 export paths, prune!, build, execute, # PE interface
        kb_load, kb_query, # KB interface

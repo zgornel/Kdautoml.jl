@@ -19,15 +19,16 @@
 #            # as long as z==false, qₛ does not matter; when z==true,
 @reexport module KSSolver
 
-using ...Random
-using ...DelimitedFiles
-using ...LinearAlgebra  # for `norm` in `rbf_kernel` (utils.jl)
-using ...DataStructures
-using ...MLJ
-using ...DataFrames
-using ...MultivariateStats
-using ...ConstraintSolver
-using ...MacroTools
+using Random
+using DelimitedFiles
+using LinearAlgebra  # for `norm` in `rbf_kernel` (utils.jl)
+using DataStructures
+using MLJ
+using DataFrames
+using MultivariateStats
+using ConstraintSolver
+using MacroTools
+using Combinatorics
 using ...Kdautoml  # needed for KB-defined precondition code in feature synthesis
                   # that when executed, references `Kdautoml`
 

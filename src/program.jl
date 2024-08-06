@@ -1,7 +1,8 @@
 @reexport module ProgramExecution
 
-using ..AutoHashEquals
-import ..AbstractTrees
+using AutoHashEquals
+import AbstractTrees
+import Base: push!, pop!
 import ..ControlFlow
 
 export AbstractPipelines, Pipelines, AbstractProgram, DaggerProgram, CodeNode, print_tree_debug
