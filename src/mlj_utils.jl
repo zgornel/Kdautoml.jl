@@ -10,7 +10,7 @@ export build_and_run_ml_pipeline,
 #   `pipeline::Vector` - contains pipeline transforms
 #   `input <:Any ` - input data
 #   `output <: Any`- output data
-function build_and_run_ml_pipeline(memory; measures=Accuracy(), tuning=Grid(resolution=30))
+function build_and_run_ml_pipeline(memory; measures=Accuracy(), tuning=MLJ.Grid(resolution=30))
     if  :pipeline in keys(memory) && :data in keys(memory)
         # assemble pipeline
         pipe = MLJ.Pipeline(memory.pipeline...)

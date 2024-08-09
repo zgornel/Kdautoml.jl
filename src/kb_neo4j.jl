@@ -20,7 +20,7 @@ end
 Base.show(io::IO, kb::KnowledgeBaseNeo4j) = begin
     container, user, pass = kb.connection
     mb_size = Base.summarysize(kb.data)/(1024^2)
-    print(io, "KnowledgeBase (Neo4j: $user:****@$container), $mb_size MB of data")
+    print(io, "KnowledgeBaseNeo4j ($user:****@$container), $mb_size MB of data")
 end
 
 # Returns a vector of statements that can be ran by execute_kb_query
@@ -69,9 +69,9 @@ end
 
 # Functions that build queries
 #   Note: the -[:LINK*0..]- return nodes 0 or more LINKs away. Useful to return target node along with linked nodes
-function build_ps_query(action, kb::Type{KnowledgeBaseNeo4j}; precondition_symbols=DEFAULT_PRECONDITION_SYMBOLS)
+function build_ps_query(action, kb::Type{KnowledgeBaseNeo4j}; allowed_preconditions=DEFAULT_PRECONDITION_SYMBOLS)
     symb_p = "p"
-    where_parts = ["($symb_p)-[:ISA]->(:$p)" for p in precondition_symbols]
+    where_parts = ["($symb_p)-[:ISA]->(:$p)" for p in allowed_preconditions]
     where_clause = "WHERE " * join(where_parts, " OR ")
     query = """
         // list of nodes selected by specific preconditions

@@ -4,6 +4,8 @@ using TOML                # used here
 using DelimitedFiles      # for `kb_neo4j.jl`, `kb_native.jl`
 using Reexport            # for KSSolver to use `@reexport`
 using DataStructures      # used here
+using Graphs
+using MetaGraphs
 import ..ControlFlow        # to extend API
 import ..ProgramExecution   # to call API
 
@@ -81,17 +83,16 @@ function ControlFlow.kb_query(kb::K, ps_state::T) where {K<:AbstractKnowledgeBas
     # Precondition options:
     # • a tuple containing any of the values (:AbstractPrecondition, :InputPrecondition, :DataPrecondition, :PipelinePrecondition)
     # If the tuple is empty, all preconditions are used.
-    precondition_symbols = if hasproperty(component.metadata, :preconditions)
-                               component.metadata.preconditions
-                           else
-                               DEFAULT_PRECONDITION_SYMBOLS
-                           end
+    allowed_preconditions = if hasproperty(component.metadata, :preconditions)
+                                component.metadata.preconditions
+                            else
+                                DEFAULT_PRECONDITION_SYMBOLS
+                            end
 
     # Read and parse components (including preconditions)
     component_name = ControlFlow.namify(component)
-    kb_result = execute_kb_query(kb,
-                          build_ps_query(component_name, K; precondition_symbols);
-                          output=true)
+    query = build_ps_query(component_name, K; allowed_preconditions);
+    kb_result = execute_kb_query(kb, query; output=true)
 
     # Build data structure for constraint solver
     datakb = build_ps_csp_data(kb_result, component_name, kb)
