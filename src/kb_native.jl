@@ -4,8 +4,8 @@ struct KnowledgeBaseNative <: AbstractKnowledgeBase
 end
 
 Base.show(io::IO, kb::KnowledgeBaseNative) = begin
-    mb_size = Base.summarysize(kb.data)/(1024^2)
-    print(io, "KnowledgeBaseNative, $mb_size MB of data, $(Graphs.nv(kb.graph)) nodes, $(Graphs.ne(kb.graph)) links")
+    mb_size = round(Base.summarysize(kb.data)/(1024^2); digits=3)
+    print(io, "KnowledgeBaseNative, $(Graphs.nv(kb.graph)) nodes, $(Graphs.ne(kb.graph)) links, $mb_size MB of data")
 end
 
 KnowledgeBaseNative(data) = KnowledgeBaseNative(data, __build_metagraph(data))
@@ -30,7 +30,7 @@ function build_ps_query(node_label::String,
     return PipelineSynthesisQuery(node_label, allowed_preconditions)
 end
 
-function build_fs_query(feature_type, ::Type{KnowledgeBaseNative})
+function build_fs_query(node_label, ::Type{KnowledgeBaseNative})
     return FeatureSynthesisQuery(node_label)
 end
 

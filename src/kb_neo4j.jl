@@ -20,7 +20,7 @@ end
 Base.show(io::IO, kb::KnowledgeBaseNeo4j) = begin
     container, user, pass = kb.connection
     mb_size = Base.summarysize(kb.data)/(1024^2)
-    print(io, "KnowledgeBaseNeo4j ($user:****@$container), $mb_size MB of data")
+    print(io, "KnowledgeBaseNeo4j ($user@$container), $mb_size MB of data")
 end
 
 # Returns a vector of statements that can be ran by execute_kb_query
