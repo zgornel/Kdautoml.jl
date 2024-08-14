@@ -1,7 +1,8 @@
 @reexport module ProgramExecution
 
-using ..AutoHashEquals
-import ..AbstractTrees
+using AutoHashEquals
+import AbstractTrees
+import Base: push!, pop!
 import ..ControlFlow
 
 export AbstractPipelines, Pipelines, AbstractProgram, DaggerProgram, CodeNode, print_tree_debug
@@ -196,7 +197,7 @@ function clear!(;current_mod=@__MODULE__)
       GC.gc()
 end
 
-
+#TODO: rename this function
 Base.push!(program::DaggerProgram, node) = begin
     symnode = "v_"* string(hash(rand()), base=16)  # in the program, the symbol gets associated to output value
     func_code = hasproperty(node.code, :code) ? node.code.code : ""
@@ -227,6 +228,7 @@ Base.push!(program::DaggerProgram, node) = begin
     return symnode
 end
 
+#TODO: rename or remove, not used
 # To push a popped node:
 # `julia> push!(prg, CodeNode("MyNode", (code=pop!(prg),)))`
 Base.pop!(program::DaggerProgram) = begin

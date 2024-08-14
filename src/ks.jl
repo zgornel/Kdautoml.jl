@@ -1,36 +1,37 @@
-@reexport module KnowledgeBase
+@reexport module KnowledgeSystem
 
-using ..TOML
-using ..Random
-using ..DelimitedFiles
-using ..LinearAlgebra  # for `norm` in `rbf_kernel` (utils.jl)
-using ..DataStructures
-using ..MLJ
-using ..DataFrames
-using ..ConstraintSolver
-using ..MacroTools
-using ..Kdautoml  # needed for KB-defined precondition code in feature synthesis
-                  # that when executed, references `Kdautoml`
-import ..MLJModelInterface
-import ..ControlFlow
-import ..ProgramExecution
+using TOML                # used here
+using DelimitedFiles      # for `kb_neo4j.jl`, `kb_native.jl`
+using Reexport            # for KSSolver to use `@reexport`
+using DataStructures      # used here
+using Graphs
+using MetaGraphs
+import ..ControlFlow        # to extend API
+import ..ProgramExecution   # to call API
 
 
-abstract type AbstractKnowledgeBase end
-
-
+# Utils that extent MLJ for use in KnowledgeBases
+using MultivariateStats
+using DataFrames
+using MLJ
+import MLJModelInterface
 include("mlj_utils.jl")
-include("neo4j.jl")
-include("nativekb.jl")
-include("sat.jl")
 
-export AbstractKnowledgeBase, kb_load
 
-const CS=ConstraintSolver
-const model = CS.Model(CS.optimizer_with_attributes(CS.Optimizer,
-                       "time_limit"=>1000,
-                       "all_solutions"=>true,
-                       "all_optimal_solutions"=>true))
+# Knowledge Base API implementations
+# Type definitions, exports
+export AbstractKnowledgeBase
+abstract type AbstractKnowledgeBase end
+# Includes
+include("kb_neo4j.jl")
+include("kb_native.jl")
+
+
+# Solver interface
+function solve_csp end
+function add_data_to_csp_solution end
+include("solver.jl")
+
 
 const DEFAULT_PRECONDITION_SYMBOLS=(:AbstractPrecondition, :InputPrecondition, :DataPrecondition, :PipelinePrecondition)
 
@@ -49,9 +50,9 @@ function ControlFlow.kb_load(filepath; kb_type=:neo4j, kb_flavour=:pipe_synthesi
     end
 
     if kb_type==:neo4j
-        return kb_load(KnowledgeBaseNeo4j, filepath; connection=_connection)
+        return ControlFlow.kb_load(KnowledgeBaseNeo4j, filepath; connection=_connection)
     elseif kb_type==:native
-        return kb_load(KnowledgeBaseNative, filepath; connection=_connection)
+        return ControlFlow.kb_load(KnowledgeBaseNative, filepath; connection=_connection)
     else
         @warn "Unrecognized knowledge base type $kb_type"
         return nothing
@@ -82,17 +83,16 @@ function ControlFlow.kb_query(kb::K, ps_state::T) where {K<:AbstractKnowledgeBas
     # Precondition options:
     # • a tuple containing any of the values (:AbstractPrecondition, :InputPrecondition, :DataPrecondition, :PipelinePrecondition)
     # If the tuple is empty, all preconditions are used.
-    precondition_symbols = if hasproperty(component.metadata, :preconditions)
-                               component.metadata.preconditions
-                           else
-                               DEFAULT_PRECONDITION_SYMBOLS
-                           end
+    allowed_preconditions = if hasproperty(component.metadata, :preconditions)
+                                component.metadata.preconditions
+                            else
+                                DEFAULT_PRECONDITION_SYMBOLS
+                            end
 
     # Read and parse components (including preconditions)
     component_name = ControlFlow.namify(component)
-    kb_result = execute_kb_query(kb,
-                          build_ps_query(component_name, K; precondition_symbols);
-                          output=true)
+    query = build_ps_query(component_name, K; allowed_preconditions);
+    kb_result = execute_kb_query(kb, query; output=true)
 
     # Build data structure for constraint solver
     datakb = build_ps_csp_data(kb_result, component_name, kb)
@@ -324,4 +324,5 @@ ControlFlow.get_update_nodes(kbnodes, ps_state::Tuple{ControlFlow.DirectFeatureS
     end
     return updatenodes
 end
+
 end # module
