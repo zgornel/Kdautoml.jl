@@ -31,10 +31,12 @@ module DeepFeatureSynthesis
         path::AbstractString
         max_depth::Int
         calculate::Bool
+        kb_type::Symbol
+        kb_flavour::Symbol
     end
 
     function MLJ.transform(dfs::DeepFeatureSynthesisTransformer, _, data)
-        kb = ControlFlow.kb_load(dfs.path; kb_type=:neo4j, kb_flavour=:feature_synthesis)  #TODO: make this configurable
+        kb = ControlFlow.kb_load(dfs.path; kb_type=dfs.kb_type, kb_flavour=dfs.kb_flavour)
         #kb = TOML.parse(open(dfs.path))
         features = deep_feature_synthesis(data, dfs.max_depth; kb=kb, calculate=dfs.calculate)
         df_features, _ = to_df(features)
