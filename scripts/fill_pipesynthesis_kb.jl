@@ -14,6 +14,6 @@ kb = Kdautoml.kb_load(kbpath; kb_type=:neo4j, kb_flavour=:pipe_synthesis)
 # Load kb data into neo4j db
 @info "Loading KB into NEO4J (container=$(kb.connection[1]))"
 Kdautoml.KnowledgeSystem.execute_kb_query(kb, "MATCH (n) DETACH DELETE n");
-for stmt in Kdautoml.KnowledgeBase.kb_to_neo4j_statements(kb)
-   Kdautoml.KnowledgeBase.execute_kb_query(kb, stmt)
+for stmt in Kdautoml.KnowledgeSystem.kb_to_neo4j_statements(kb)
+   Kdautoml.KnowledgeSystem.execute_kb_query(kb, stmt)
 end
