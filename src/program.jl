@@ -202,7 +202,7 @@ Base.push!(program::DaggerProgram, node) = begin
     symnode = "v_"* string(hash(rand()), base=16)  # in the program, the symbol gets associated to output value
     func_code = hasproperty(node.code, :code) ? node.code.code : ""
     package = hasproperty(node.code, :package) ? node.code.package : nothing
-    arguments = hasproperty(node.code, :arguments) ? node.code.arguments : ()
+    arguments = hasproperty(node.code, :arguments) ? prepare_for_interpolation.(node.code.arguments) : ()
     hyperparameters = hasproperty(node.code, :hyperparameters) ? node.code.hyperparameters : nothing
     lv = last_var(program);
     # Build standardized function signature (for KB functions)
@@ -224,9 +224,20 @@ Base.push!(program::DaggerProgram, node) = begin
             end
         end
     end
-    func_code != nothing && push!(program.segments, "$symnode = Dagger.@par ($func_code)($( join(arguments,",") ));")
+    # Create actual code
+    if func_code != nothing
+        code_segment = "$symnode = Dagger.@par ($func_code)($( join(arguments,",") ));"
+        push!(program.segments, code_segment)
+    end
     return symnode
 end
+
+prepare_for_interpolation(x::AbstractString) = "\"$x\""
+prepare_for_interpolation(x::AbstractChar) = "'$x'"
+prepare_for_interpolation(x::Expr) = ":($x)"
+prepare_for_interpolation(x::Symbol) = "Symbol(\"$x\")"
+prepare_for_interpolation(x) = x
+
 
 #TODO: rename or remove, not used
 # To push a popped node:
