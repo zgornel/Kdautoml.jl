@@ -104,11 +104,8 @@ function KnowledgeSystem.solve_csp(datakb, state)
                     _f = eval(Meta.parse(strip(ps.code)))
                     _fc = Base.invokelatest(_f, (ps.args...))  # take 1'st set of arguments (from KB, to check against), returns a function
                     pv = Base.invokelatest(_fc, state)         # take 2'nd set of arguments (current state), returns a Bool
-                    if pv
-                        @info "CS: Executed precondition $(ps.name) => $pv"
-                    else
-                        @warn "CS: Executed precondition $(ps.name) => $pv"
-                    end
+                    _status = ifelse(pv, "Pass", "Fail")
+                    @info "Solver ($_status): Executed precondition $(ps.name) = $pv"
                     @eval KSSolver CS.@constraint(CSMODEL, $xvars[$i] == $xvars[$i] * $pv)
                 end
             end
