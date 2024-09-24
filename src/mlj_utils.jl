@@ -1,3 +1,7 @@
+# TODO: Move all code here into an MLJInterface that links
+#       KdautoML and MLJ in a way that makes KdautoML not reliant on
+#       MLJ anymore i.e. MLJ just becomes a plugin
+
 # Utility functions
 export build_and_run_ml_pipeline,
        df2vec, xor_linear_separability,
