@@ -1,16 +1,16 @@
+# Note: Links to improve the quality of the execution:
+# • https://github.com/SciML/RuntimeGeneratedFunctions.jl (https://github.com/SciML/RuntimeGeneratedFunctions.jl)
+# • https://domluna.github.io/JuliaFormatter.jl/stable/ (julia formatter)
+# • https://github.com/jkrumbiegel/HotTest.jl/blob/main/src/HotTest.jl (useful stuff for wrapping code into modules)
+
 @reexport module ProgramExecution
 
 using AutoHashEquals
 import AbstractTrees
-import Base: push!, pop!
 import ..ControlFlow
 
 export AbstractPipelines, Pipelines, AbstractProgram, DaggerProgram, CodeNode, print_tree_debug
-# TODO: Look over this interesting links
-# • https://github.com/SciML/RuntimeGeneratedFunctions.jl (https://github.com/SciML/RuntimeGeneratedFunctions.jl)
-# • https://domluna.github.io/JuliaFormatter.jl/stable/ (julia formatter)
-# • https://github.com/jkrumbiegel/HotTest.jl/blob/main/src/HotTest.jl (useful stuff for wrapping code into modules)
-#
+
 # CodeNode - basic structure representing the node of the tree
 @auto_hash_equals mutable struct CodeNode
     id::String
@@ -19,12 +19,9 @@ export AbstractPipelines, Pipelines, AbstractProgram, DaggerProgram, CodeNode, p
     children::Vector{CodeNode}
 end
 
-
 # id-less constructor
 CodeNode(name::String, code, children::Vector{CodeNode}) = CodeNode(string(hash(rand())), name, code, children)
-
 CodeNode(name::String, code) = CodeNode(string(hash(rand())), name, code, CodeNode[])
-
 CodeNode(name::Symbol, args...) = CodeNode(string(name), args...)  # handle Symbol names
 
 
@@ -52,6 +49,7 @@ Base.show(io::IO, n::CodeNode) = begin
 end
 
 has_children(node) = !isempty(AbstractTrees.children(node))
+
 
 function ControlFlow.paths(startnode, endnodeids)
     # Function that shrinks a Vector{CodeNode} to the first occurence
@@ -197,8 +195,8 @@ function clear!(;current_mod=@__MODULE__)
       GC.gc()
 end
 
-#TODO: rename this function
-Base.push!(program::DaggerProgram, node) = begin
+
+function add_node!(program::DaggerProgram, node)
     symnode = "v_"* string(hash(rand()), base=16)  # in the program, the symbol gets associated to output value
     func_code = hasproperty(node.code, :code) ? node.code.code : ""
     package = hasproperty(node.code, :package) ? node.code.package : nothing
@@ -239,16 +237,6 @@ prepare_for_interpolation(x::Symbol) = "Symbol(\"$x\")"
 prepare_for_interpolation(x) = x
 
 
-#TODO: rename or remove, not used
-# To push a popped node:
-# `julia> push!(prg, CodeNode("MyNode", (code=pop!(prg),)))`
-Base.pop!(program::DaggerProgram) = begin
-    code = pop!(program.segments)
-    code = replace(code, r"v_[\w]+.=.Dagger\.@par.\([\s]*"=>""); # eliminate first part
-    code = replace(code, r"\)\([\w\s,.;]+\);$"=>"");              # eliminate last part
-end
-
-
 # Program structure API;
 # Contains symbolic structure of the program and results form executions
 # indexed by CodeNode id's
@@ -279,7 +267,7 @@ function ControlFlow.build(nodes::Vector{CodeNode}, ::Pipelines{P}) where {P<:Ab
     program = P(;header=true)
     for node in nodes
         node.name == "root" && continue
-        push!(program, node)
+        add_node!(program, node)
     end
     return program
 end
