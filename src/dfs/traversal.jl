@@ -69,14 +69,6 @@ function to_df(features)
     featkeys = collect(keys(features))
     skeysidx = sortperm(featkeys)  # idexes of sorted keys
     return DataFrame(reduce(hcat, (features[featkeys[i]].values for i in skeysidx)), :auto), Dict()
-    #
-    #TODO: Make *sure* that feature names in the resulting DataFrame are generated consistently
-    #      between different runs with the same input; the scheme below is buggy and naming of
-    #      features is inconsistent across runs
-    #
-    ###_tmp = [feat_name(i, features[featkeys[i]]) => features[featkeys[i]].values
-    ###        for i in skeysidx]
-    ###return DataFrame(_tmp), Dict(k=>i for (i,k) in enumerate(map(first, _tmp)))
 end
 
 

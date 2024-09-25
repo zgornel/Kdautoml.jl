@@ -6,11 +6,13 @@ PIPESYNTHESIS_CONTAINER_NAME = "neo4j_pipesynthesis_kb"
 FEATURESYNTHESIS_CONTAINER_NAME = "neo4j_featuresynthesis_kb"
 
 
-# TODO: Make this parametric
 get_neo4j_user() = get(ENV, "NEO4J_USER", "neo4j")
 get_neo4j_pass() = get(ENV, "NEO4J_PASS", "test")
-get_container(container_name) = chop(read(pipeline(`docker ps `,`grep "$container_name"`, `awk '{print $1}'`), String))
-
+get_container(container_name) = try
+        chop(read(pipeline(`docker ps `,`grep "$container_name"`, `awk '{print $1}'`), String))
+    catch e
+        @warn "Could not retrieve containter id for $container_name:\n$e"
+    end
 
 struct KnowledgeBaseNeo4j <: AbstractKnowledgeBase
     data::Dict
@@ -29,10 +31,6 @@ function kb_to_neo4j_statements(kb)
 
     # Template statement creation
     component_node_template(node_label) = "CREATE (n:$node_label)"
-    #TODO(Corneliu): Check whether it makes sense to add the function code and args
-    # in the neo4j db or not; at this point type to string conversion is difficult
-    # and potentially not needed.
-    # '0c3586a' is the latest commit supporting precondition func+args in db
     precondition_node_template(node_label, func, args) = "CREATE (n:$node_label)"
     relation_template(src, dst, rel) = "MATCH (a:$src), (b:$dst) CREATE (a)-[r:$rel]->(b)"
 
@@ -102,7 +100,6 @@ function build_fs_query(feature_type, kb::Type{KnowledgeBaseNeo4j})
 end
 
 
-#TODO: Check docker is installed, container valid, etc
 function execute_kb_query(kb::KnowledgeBaseNeo4j, cypher_cmd; wait=true, output=false)
     # Function that parses neo4j results into a Matrix{String}
     function parse_neo4j_result(result)

@@ -190,7 +190,7 @@ function __build_metagraph(kb)
     # Add a component to the metagraph with a specific label
     function add_pipe_component!(mg, node_label, node_type)
         add_vertices!(mg, 1);
-        #TODO: Decide whether to add more data here i.e. code etc.
+        # Note: One can add more data here i.e. code etc.
         set_props!(mg, nv(mg), Dict(:type=>node_type, :label=>node_label))
     end
 
