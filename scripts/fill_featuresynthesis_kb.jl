@@ -9,15 +9,11 @@ using Kdautoml
 kbpath = ARGS[1]
 
 @info "Loading KB at $kbpath"
-kb = Kdautoml.kb_load(kbpath)
+kb = Kdautoml.kb_load(kbpath; kb_type=:neo4j, kb_flavour=:feature_synthesis)
 
 # Load kb data into neo4j db
-user="neo4j"
-pass="test"
-container = Kdautoml.get_container(Kdautoml.FEATURESYNTHESIS_CONTAINER_NAME)
-@info "Loading KB into NEO4J (container=$container)"
-Kdautoml.cypher_shell(container, user, pass, "MATCH (n) DETACH DELETE n");
-for stmt in Kdautoml.kb_to_neo4j_statements(kb)
-   Kdautoml.cypher_shell(container, user, pass, stmt)
+@info "Loading KB into NEO4J (container=$(kb.connection[1]))"
+Kdautoml.KnowledgeSystem.execute_kb_query(kb, "MATCH (n) DETACH DELETE n");
+for stmt in Kdautoml.KnowledgeSystem.kb_to_neo4j_statements(kb)
+   Kdautoml.KnowledgeSystem.execute_kb_query(kb, stmt)
 end
-

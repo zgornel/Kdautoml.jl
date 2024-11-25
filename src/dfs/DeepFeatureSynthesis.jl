@@ -18,7 +18,7 @@ module DeepFeatureSynthesis
     using MacroTools
     using Graphs
     using MetaGraphs
-    import ..MLJ
+    import MLJ
     using ..ControlFlow  # `kb_query` is defined in `ControlFlow`
 
     export AbstractFeature, deep_feature_synthesis
@@ -31,12 +31,12 @@ module DeepFeatureSynthesis
         path::AbstractString
         max_depth::Int
         calculate::Bool
+        kb_type::Symbol
+        kb_flavour::Symbol
     end
 
     function MLJ.transform(dfs::DeepFeatureSynthesisTransformer, _, data)
-        kb = open(dfs.path) do io
-            TOML.parse(io)
-        end
+        kb = ControlFlow.kb_load(dfs.path; kb_type=dfs.kb_type, kb_flavour=dfs.kb_flavour)
         #kb = TOML.parse(open(dfs.path))
         features = deep_feature_synthesis(data, dfs.max_depth; kb=kb, calculate=dfs.calculate)
         df_features, _ = to_df(features)

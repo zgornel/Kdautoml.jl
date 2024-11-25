@@ -1,15 +1,16 @@
-@reexport module ProgramExecution
-
-using ..AutoHashEquals
-import ..AbstractTrees
-import ..ControlFlow
-
-export AbstractPipelines, Pipelines, AbstractProgram, DaggerProgram, CodeNode, print_tree_debug
-# TODO: Look over this interesting links
+# Note: Links to improve the quality of the execution:
 # • https://github.com/SciML/RuntimeGeneratedFunctions.jl (https://github.com/SciML/RuntimeGeneratedFunctions.jl)
 # • https://domluna.github.io/JuliaFormatter.jl/stable/ (julia formatter)
 # • https://github.com/jkrumbiegel/HotTest.jl/blob/main/src/HotTest.jl (useful stuff for wrapping code into modules)
-#
+
+@reexport module ProgramExecution
+
+using AutoHashEquals
+import AbstractTrees
+import ..ControlFlow
+
+export AbstractPipelines, Pipelines, AbstractProgram, DaggerProgram, CodeNode, print_tree_debug
+
 # CodeNode - basic structure representing the node of the tree
 @auto_hash_equals mutable struct CodeNode
     id::String
@@ -18,12 +19,9 @@ export AbstractPipelines, Pipelines, AbstractProgram, DaggerProgram, CodeNode, p
     children::Vector{CodeNode}
 end
 
-
 # id-less constructor
 CodeNode(name::String, code, children::Vector{CodeNode}) = CodeNode(string(hash(rand())), name, code, children)
-
 CodeNode(name::String, code) = CodeNode(string(hash(rand())), name, code, CodeNode[])
-
 CodeNode(name::Symbol, args...) = CodeNode(string(name), args...)  # handle Symbol names
 
 
@@ -50,6 +48,8 @@ Base.show(io::IO, n::CodeNode) = begin
     end
 end
 
+has_children(node) = !isempty(AbstractTrees.children(node))
+
 
 function ControlFlow.paths(startnode, endnodeids)
     # Function that shrinks a Vector{CodeNode} to the first occurence
@@ -65,7 +65,7 @@ function ControlFlow.paths(startnode, endnodeids)
     PATHS = Vector{Pair{CodeNode, Vector{CodeNode}}}()
     startnode = first(ordering)
     tmp = [startnode]
-    !AbstractTrees.has_children(startnode) && return Dict(startnode=>[startnode])
+    !has_children(startnode) && return Dict(startnode=>[startnode])
     for node in ordering[begin+1:end]
         #println("CodeNode=$(node.name), tmp=$(map(n->n.name, tmp)))")
         !in(node, AbstractTrees.children(last(tmp))) && (tmp = shrinkto(tmp, node))
@@ -73,7 +73,7 @@ function ControlFlow.paths(startnode, endnodeids)
             #println("Returning paths for $(node.name)!")
             push!(PATHS, node=>vcat(tmp, node))
         else  # another node (if not leaf, track)
-            AbstractTrees.has_children(node) && push!(tmp, node)
+            has_children(node) && push!(tmp, node)
         end
     end
     return PATHS
@@ -196,11 +196,11 @@ function clear!(;current_mod=@__MODULE__)
 end
 
 
-Base.push!(program::DaggerProgram, node) = begin
+function add_node!(program::DaggerProgram, node)
     symnode = "v_"* string(hash(rand()), base=16)  # in the program, the symbol gets associated to output value
     func_code = hasproperty(node.code, :code) ? node.code.code : ""
     package = hasproperty(node.code, :package) ? node.code.package : nothing
-    arguments = hasproperty(node.code, :arguments) ? node.code.arguments : ()
+    arguments = hasproperty(node.code, :arguments) ? prepare_for_interpolation.(node.code.arguments) : ()
     hyperparameters = hasproperty(node.code, :hyperparameters) ? node.code.hyperparameters : nothing
     lv = last_var(program);
     # Build standardized function signature (for KB functions)
@@ -222,17 +222,19 @@ Base.push!(program::DaggerProgram, node) = begin
             end
         end
     end
-    func_code != nothing && push!(program.segments, "$symnode = Dagger.@par ($func_code)($( join(arguments,",") ));")
+    # Create actual code
+    if func_code != nothing
+        code_segment = "$symnode = Dagger.@par ($func_code)($( join(arguments,",") ));"
+        push!(program.segments, code_segment)
+    end
     return symnode
 end
 
-# To push a popped node:
-# `julia> push!(prg, CodeNode("MyNode", (code=pop!(prg),)))`
-Base.pop!(program::DaggerProgram) = begin
-    code = pop!(program.segments)
-    code = replace(code, r"v_[\w]+.=.Dagger\.@par.\([\s]*"=>""); # eliminate first part
-    code = replace(code, r"\)\([\w\s,.;]+\);$"=>"");              # eliminate last part
-end
+prepare_for_interpolation(x::AbstractString) = "\"$x\""
+prepare_for_interpolation(x::AbstractChar) = "'$x'"
+prepare_for_interpolation(x::Expr) = ":($x)"
+prepare_for_interpolation(x::Symbol) = "Symbol(\"$x\")"
+prepare_for_interpolation(x) = x
 
 
 # Program structure API;
@@ -265,7 +267,7 @@ function ControlFlow.build(nodes::Vector{CodeNode}, ::Pipelines{P}) where {P<:Ab
     program = P(;header=true)
     for node in nodes
         node.name == "root" && continue
-        push!(program, node)
+        add_node!(program, node)
     end
     return program
 end
